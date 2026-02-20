@@ -79,6 +79,14 @@ Update this file with a "Changelog" section detailing every file changed.
 
 ## Changelog
 
+### 2026-02-20: README.md Update
+- Added `yakkinator-in-action.gif` preview image
+- Added Quick Start section with one-click setup instructions
+- Added storage requirement notice (~16GB in %LOCALAPPDATA%)
+- Made README more fun and engaging with emojis and casual language
+- Improved Running section with clearer, friendlier steps
+- Added friendly closing line to Troubleshooting section
+
 ### `src/IndexTTSStudio/ViewModels/GenerateViewModel.cs`
 - **Change A**: Extended `IsBackendRunning` property change handler to set `StatusText = "Backend ready"` when backend comes online.
 - **Change B**: Modified `GenerateAsync()` `finally` block to reset `StatusText = "Backend ready"` after successful generation.
