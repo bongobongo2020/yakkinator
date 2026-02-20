@@ -10,6 +10,12 @@
 
 ---
 
+## Download 💾
+
+**[Get TheYakkinator-v1.0.0-win-x64.zip](https://github.com/bongobongo2020/yakkinator/releases/download/alpha/TheYakkinator-v1.0.0-win-x64.zip)**
+
+---
+
 ## Quick Start ⚡
 
 **One-click setup!** Just double-click `TheYakkinator.exe` and you're off to the races.
