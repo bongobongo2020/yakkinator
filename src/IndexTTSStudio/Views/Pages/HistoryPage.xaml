@@ -1,0 +1,48 @@
+<Page x:Class="IndexTTSStudio.Views.Pages.HistoryPage"
+           xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+           Title="History">
+
+    <StackPanel Margin="32,16,32,32" MaxWidth="700" HorizontalAlignment="Left">
+        <Grid Margin="0,0,0,20">
+            <TextBlock Text="Output History" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <ui:Button Content="Refresh" Icon="{ui:SymbolIcon ArrowSync24}"
+                       Command="{Binding RefreshCommand}"
+                       HorizontalAlignment="Right" />
+        </Grid>
+
+        <ItemsControl ItemsSource="{Binding Outputs}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <ui:Card Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding FileName}" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Opacity="0.5" FontSize="11">
+                                    <Run Text="{Binding Created, StringFormat={}{0:g}}" />
+                                    <Run Text=" | " />
+                                    <Run Text="{Binding SizeKb, StringFormat={}{0:F0} KB}" />
+                                </TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <ui:Button Icon="{ui:SymbolIcon Play24}"
+                                           Command="{Binding DataContext.PlayCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                           CommandParameter="{Binding}"
+                                           ToolTip="Play" Margin="0,0,4,0" />
+                                <ui:Button Icon="{ui:SymbolIcon Delete24}" Appearance="Danger"
+                                           Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                           CommandParameter="{Binding}"
+                                           ToolTip="Delete" />
+                            </StackPanel>
+                        </Grid>
+                    </ui:Card>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</Page>

@@ -1,0 +1,43 @@
+<Page x:Class="IndexTTSStudio.Views.Pages.SettingsPage"
+           xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+           Title="Settings">
+
+    <StackPanel Margin="32,16,32,32" MaxWidth="600" HorizontalAlignment="Left">
+        <TextBlock Text="Settings" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,20" />
+
+        <ui:Card Margin="0,0,0,12">
+            <StackPanel>
+                <ui:ToggleSwitch Content="FP16 Inference" IsChecked="{Binding UseFp16}"
+                                 ToolTip="Use half-precision for faster inference and lower VRAM" />
+            </StackPanel>
+        </ui:Card>
+
+        <ui:Card Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="API Port" FontSize="13" Margin="0,0,0,4" />
+                <ui:NumberBox Value="{Binding ApiPort}" Minimum="1024" Maximum="65535" SpinButtonPlacementMode="Inline" />
+            </StackPanel>
+        </ui:Card>
+
+        <ui:Card Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Default Generation Parameters" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+                <TextBlock Text="Temperature" Opacity="0.6" FontSize="11" />
+                <Slider Value="{Binding DefaultTemperature}" Minimum="0.1" Maximum="2.0" Margin="0,0,0,8" />
+
+                <TextBlock Text="Top P" Opacity="0.6" FontSize="11" />
+                <Slider Value="{Binding DefaultTopP}" Minimum="0.1" Maximum="1.0" Margin="0,0,0,8" />
+
+                <TextBlock Text="Top K" Opacity="0.6" FontSize="11" />
+                <Slider Value="{Binding DefaultTopK}" Minimum="1" Maximum="100" />
+            </StackPanel>
+        </ui:Card>
+
+        <ui:Button Content="Save Settings" Appearance="Primary"
+                   Icon="{ui:SymbolIcon Save24}"
+                   Command="{Binding SaveCommand}" />
+    </StackPanel>
+</Page>

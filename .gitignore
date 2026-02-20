@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+backend/
+*.wav
+outputs/
+__pycache__/
+*.pyc
+.venv/
