@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text.Json;
 using IndexTTSStudio.Helpers;
 
 namespace IndexTTSStudio.Services;
@@ -64,13 +65,24 @@ public class PythonBackendService : IDisposable
         while (sw.Elapsed < maxWait)
         {
             ct.ThrowIfCancellationRequested();
+            // Bail early if the process already died (crash during model load)
+            if (_backendProcess.HasExited)
+                throw new InvalidOperationException($"Backend process exited unexpectedly (code {_backendProcess.ExitCode}). Check that models are installed correctly.");
+
             try
             {
                 var response = await _httpClient.GetAsync($"http://127.0.0.1:{_port}/api/health", ct);
                 if (response.IsSuccessStatusCode)
                 {
-                    OnLog?.Invoke("Backend is ready!");
-                    return;
+                    var json = await response.Content.ReadAsStringAsync(ct);
+                    var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("status", out var status) &&
+                        status.GetString() == "ready")
+                    {
+                        OnLog?.Invoke("Backend is ready!");
+                        return;
+                    }
+                    OnLog?.Invoke("Backend is loading model...");
                 }
             }
             catch { /* not ready yet */ }

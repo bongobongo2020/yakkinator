@@ -1,66 +1,70 @@
 <Page x:Class="IndexTTSStudio.Views.Pages.GeneratePage"
-           xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-           xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-           Title="Generate">
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Generate">
 
-    <Grid Margin="32,16,32,32">
+    <Grid Margin="8,4,8,4">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="300" />
+            <ColumnDefinition Width="220" />
         </Grid.ColumnDefinitions>
 
         <!-- Main Content -->
-        <ScrollViewer Grid.Column="0" Margin="0,0,16,0" VerticalScrollBarVisibility="Auto">
-            <StackPanel MaxWidth="600">
-
-                <TextBlock Text="Generate Speech" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,20" />
+        <ScrollViewer Grid.Column="0" Margin="0,0,10,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="560">
 
                 <!-- Voice Selection -->
-                <TextBlock Text="REFERENCE VOICE" FontSize="11" FontWeight="SemiBold" Opacity="0.5" Margin="0,0,0,6" />
-                <ui:Card Margin="0,0,0,16">
+                <TextBlock Text="VOICE" Style="{StaticResource RetroSectionLabel}" />
+                <ui:Card Margin="0,0,0,5" Padding="8,5,8,5"
+                         Background="{StaticResource RetroCard}"
+                         BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="{Binding VoiceFileName}" FontSize="14" />
-                            <TextBlock Text="WAV, MP3, or FLAC audio file" Opacity="0.5" FontSize="11" />
+                            <TextBlock Text="{Binding VoiceFileName}" FontSize="12" />
+                            <TextBlock Text="WAV, MP3 or FLAC" Opacity="0.45" FontSize="10" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <ui:Button Content="Browse"
                                        Icon="{ui:SymbolIcon FolderOpen24}"
                                        Command="{Binding BrowseVoiceCommand}"
-                                       Margin="0,0,8,0" />
-                            <ui:Button Content="Save to Library"
+                                       Style="{StaticResource BounceButton}"
+                                       Margin="0,0,5,0" />
+                            <ui:Button Content="Save"
                                        Icon="{ui:SymbolIcon Save24}"
                                        Command="{Binding SaveVoiceCommand}"
+                                       Style="{StaticResource BounceButton}"
                                        Appearance="Light" />
                         </StackPanel>
                     </Grid>
                 </ui:Card>
 
                 <!-- Text Input -->
-                <TextBlock Text="TEXT TO SPEAK" FontSize="11" FontWeight="SemiBold" Opacity="0.5" Margin="0,0,0,6" />
+                <TextBlock Text="TEXT" Style="{StaticResource RetroSectionLabel}" />
                 <ui:TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
                             PlaceholderText="Enter the text you want to synthesize..."
                             AcceptsReturn="True"
                             TextWrapping="Wrap"
-                            MinHeight="120"
-                            MaxHeight="200"
-                            Margin="0,0,0,16" />
+                            MinHeight="50"
+                            MaxHeight="100"
+                            Margin="0,0,0,5" />
 
                 <!-- Emotion Control -->
-                <TextBlock Text="EMOTION CONTROL" FontSize="11" FontWeight="SemiBold" Opacity="0.5" Margin="0,0,0,6" />
-                <ui:Card Margin="0,0,0,16">
-                    <StackPanel Margin="4">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <RadioButton Content="None" IsChecked="True" GroupName="EmotionMode" Margin="0,0,12,0"
+                <TextBlock Text="EMOTION" Style="{StaticResource RetroSectionLabel}" />
+                <ui:Card Margin="0,0,0,6" Padding="8,5,8,5"
+                         Background="{StaticResource RetroCard}"
+                         BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton Content="None" IsChecked="True" GroupName="EmotionMode" Margin="0,0,8,0"
                                          Tag="none" Checked="EmotionModeChanged" />
-                            <RadioButton Content="Audio Reference" GroupName="EmotionMode" Margin="0,0,12,0"
+                            <RadioButton Content="Audio" GroupName="EmotionMode" Margin="0,0,8,0"
                                          Tag="audio" Checked="EmotionModeChanged" />
-                            <RadioButton Content="Emotion Sliders" GroupName="EmotionMode" Margin="0,0,12,0"
+                            <RadioButton Content="Sliders" GroupName="EmotionMode" Margin="0,0,8,0"
                                          Tag="vector" Checked="EmotionModeChanged" />
                             <RadioButton Content="From Text" GroupName="EmotionMode"
                                          Tag="text" Checked="EmotionModeChanged" />
@@ -68,105 +72,148 @@
 
                         <!-- Audio emotion ref -->
                         <StackPanel Visibility="{Binding EmotionMode, Converter={StaticResource EmotionModeVisConverter}, ConverterParameter=audio}"
-                                    Margin="0,8,0,0">
+                                    Margin="0,4,0,0">
                             <ui:Button Content="Select Emotion Audio"
                                        Icon="{ui:SymbolIcon MusicNote224}"
-                                       Command="{Binding BrowseEmotionAudioCommand}" />
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <TextBlock Text="Blend Strength:" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                <Slider Value="{Binding EmotionAlpha}" Minimum="0" Maximum="1" Width="200"
+                                       Command="{Binding BrowseEmotionAudioCommand}"
+                                       Style="{StaticResource BounceButton}" />
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Blend:" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="11" />
+                                <Slider Value="{Binding EmotionAlpha}" Minimum="0" Maximum="1" Width="130"
                                         TickFrequency="0.1" IsSnapToTickEnabled="True" />
                                 <TextBlock Text="{Binding EmotionAlpha, StringFormat={}{0:F1}}"
-                                           VerticalAlignment="Center" Margin="8,0,0,0" />
+                                           VerticalAlignment="Center" Margin="5,0,0,0" FontSize="11" />
                             </StackPanel>
                         </StackPanel>
 
                         <!-- Vector sliders -->
                         <StackPanel Visibility="{Binding EmotionMode, Converter={StaticResource EmotionModeVisConverter}, ConverterParameter=vector}"
-                                    Margin="0,8,0,0">
+                                    Margin="0,4,0,0">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="72" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="32" />
                                 </Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions>
-                                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
-                                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                                    <RowDefinition Height="19" /><RowDefinition Height="19" /><RowDefinition Height="19" /><RowDefinition Height="19" />
+                                    <RowDefinition Height="19" /><RowDefinition Height="19" /><RowDefinition Height="19" /><RowDefinition Height="19" />
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Text="Joy" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="0" Text="Joy" VerticalAlignment="Center" FontSize="11" />
                                 <Slider Grid.Row="0" Grid.Column="1" Value="{Binding Joy}" Minimum="0" Maximum="1" />
-                                <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Joy, StringFormat={}{0:F2}}" />
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Joy, StringFormat={}{0:F2}}" FontSize="10" VerticalAlignment="Center" />
 
-                                <TextBlock Grid.Row="1" Text="Anger" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="1" Text="Anger" VerticalAlignment="Center" FontSize="11" />
                                 <Slider Grid.Row="1" Grid.Column="1" Value="{Binding Anger}" Minimum="0" Maximum="1" />
-                                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Anger, StringFormat={}{0:F2}}" />
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Anger, StringFormat={}{0:F2}}" FontSize="10" VerticalAlignment="Center" />
 
-                                <TextBlock Grid.Row="2" Text="Sadness" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="2" Text="Sadness" VerticalAlignment="Center" FontSize="11" />
                                 <Slider Grid.Row="2" Grid.Column="1" Value="{Binding Sadness}" Minimum="0" Maximum="1" />
-                                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding Sadness, StringFormat={}{0:F2}}" />
+                                <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding Sadness, StringFormat={}{0:F2}}" FontSize="10" VerticalAlignment="Center" />
 
-                                <TextBlock Grid.Row="3" Text="Fear" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="3" Text="Fear" VerticalAlignment="Center" FontSize="11" />
                                 <Slider Grid.Row="3" Grid.Column="1" Value="{Binding Fear}" Minimum="0" Maximum="1" />
-                                <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding Fear, StringFormat={}{0:F2}}" />
+                                <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding Fear, StringFormat={}{0:F2}}" FontSize="10" VerticalAlignment="Center" />
 
-                                <TextBlock Grid.Row="4" Text="Disgust" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="4" Text="Disgust" VerticalAlignment="Center" FontSize="11" />
                                 <Slider Grid.Row="4" Grid.Column="1" Value="{Binding Disgust}" Minimum="0" Maximum="1" />
-                                <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding Disgust, StringFormat={}{0:F2}}" />
+                                <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding Disgust, StringFormat={}{0:F2}}" FontSize="10" VerticalAlignment="Center" />
 
-                                <TextBlock Grid.Row="5" Text="Melancholy" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="5" Text="Melancholy" VerticalAlignment="Center" FontSize="11" />
                                 <Slider Grid.Row="5" Grid.Column="1" Value="{Binding Melancholy}" Minimum="0" Maximum="1" />
-                                <TextBlock Grid.Row="5" Grid.Column="2" Text="{Binding Melancholy, StringFormat={}{0:F2}}" />
+                                <TextBlock Grid.Row="5" Grid.Column="2" Text="{Binding Melancholy, StringFormat={}{0:F2}}" FontSize="10" VerticalAlignment="Center" />
 
-                                <TextBlock Grid.Row="6" Text="Surprise" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="6" Text="Surprise" VerticalAlignment="Center" FontSize="11" />
                                 <Slider Grid.Row="6" Grid.Column="1" Value="{Binding Surprise}" Minimum="0" Maximum="1" />
-                                <TextBlock Grid.Row="6" Grid.Column="2" Text="{Binding Surprise, StringFormat={}{0:F2}}" />
+                                <TextBlock Grid.Row="6" Grid.Column="2" Text="{Binding Surprise, StringFormat={}{0:F2}}" FontSize="10" VerticalAlignment="Center" />
 
-                                <TextBlock Grid.Row="7" Text="Calm" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="7" Text="Calm" VerticalAlignment="Center" FontSize="11" />
                                 <Slider Grid.Row="7" Grid.Column="1" Value="{Binding Calm}" Minimum="0" Maximum="1" />
-                                <TextBlock Grid.Row="7" Grid.Column="2" Text="{Binding Calm, StringFormat={}{0:F2}}" />
+                                <TextBlock Grid.Row="7" Grid.Column="2" Text="{Binding Calm, StringFormat={}{0:F2}}" FontSize="10" VerticalAlignment="Center" />
                             </Grid>
                         </StackPanel>
 
                         <!-- Text emotion -->
                         <StackPanel Visibility="{Binding EmotionMode, Converter={StaticResource EmotionModeVisConverter}, ConverterParameter=text}"
-                                    Margin="0,8,0,0">
-                            <TextBlock Text="Emotion will be inferred from the text content." Opacity="0.6" />
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <TextBlock Text="Strength:" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                <Slider Value="{Binding EmotionAlpha}" Minimum="0" Maximum="1" Width="200" />
-                                <TextBlock Text="{Binding EmotionAlpha, StringFormat={}{0:F1}}" Margin="8,0,0,0" />
+                                    Margin="0,4,0,0">
+                            <TextBlock Text="Emotion inferred from text content." Opacity="0.6" FontSize="11" />
+                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                <TextBlock Text="Strength:" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="11" />
+                                <Slider Value="{Binding EmotionAlpha}" Minimum="0" Maximum="1" Width="130" />
+                                <TextBlock Text="{Binding EmotionAlpha, StringFormat={}{0:F1}}" Margin="5,0,0,0" FontSize="11" />
                             </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </ui:Card>
 
                 <!-- Generate Button + Output -->
-                <Grid Margin="0,0,0,16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
+                <StackPanel Orientation="Horizontal">
                     <ui:Button Content="{Binding IsGenerating, Converter={StaticResource GenerateButtonTextConverter}}"
                                Appearance="Primary"
                                Icon="{ui:SymbolIcon Send24}"
                                Command="{Binding GenerateCommand}"
+                               Style="{StaticResource BounceButton}"
                                IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBoolConverter}}"
-                               MinWidth="140" Height="40" FontSize="14" />
+                               MinWidth="120" Height="30" FontSize="12" />
 
-                    <ui:Button Grid.Column="1"
-                               Content="{Binding IsPlaying, Converter={StaticResource PlayButtonTextConverter}}"
+                    <ui:Button Content="{Binding IsPlaying, Converter={StaticResource PlayButtonTextConverter}}"
                                Icon="{ui:SymbolIcon Play24}"
                                Command="{Binding PlayOutputCommand}"
+                               Style="{StaticResource BounceButton}"
                                Visibility="{Binding LastOutputPath, Converter={StaticResource NullToVisConverter}}"
-                               Margin="8,0,0,0" Height="40" />
+                               Margin="5,0,0,0" Height="30" />
 
-                    <TextBlock Grid.Column="2" Text="{Binding StatusText}"
-                               VerticalAlignment="Center" Margin="12,0,0,0" Opacity="0.6" />
-                </Grid>
+                    <TextBlock Text="{Binding StatusText}"
+                               VerticalAlignment="Center" Margin="8,0,0,0" FontSize="11"
+                               Foreground="#69FF47">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasError}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsBackendRunning}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Backend ready dot -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0"
+                                Visibility="{Binding IsBackendRunning, Converter={StaticResource BoolToVisConverter}}">
+                        <Ellipse Width="8" Height="8" Fill="#69FF47" VerticalAlignment="Center" Margin="0,0,5,0" />
+                        <TextBlock Text="Backend ready" FontSize="11" Foreground="#69FF47" VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Error display -->
+                <ui:InfoBar Title="Generation Error"
+                            Message="{Binding ErrorMessage}"
+                            IsOpen="{Binding HasError}"
+                            IsClosable="True"
+                            Severity="Error"
+                            Margin="0,5,0,0" />
+
+                <!-- Backend startup progress - collapses once backend is online -->
+                <StackPanel Margin="0,6,0,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsBackendRunning}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="{Binding BackendStatus}"
+                               FontSize="11" Opacity="0.7" Margin="0,0,0,4" />
+                    <ProgressBar IsIndeterminate="True" Height="4" />
+                </StackPanel>
 
             </StackPanel>
         </ScrollViewer>
@@ -174,34 +221,38 @@
         <!-- Right Sidebar: Advanced Settings + Saved Voices -->
         <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Text="ADVANCED" FontSize="11" FontWeight="SemiBold" Opacity="0.5" Margin="0,0,0,6" />
-                <ui:CardExpander Header="Generation Parameters" Margin="0,0,0,12">
-                    <StackPanel Margin="8">
-                        <TextBlock Text="Temperature" FontSize="11" Opacity="0.6" />
-                        <Slider Value="{Binding Temperature}" Minimum="0.1" Maximum="2.0" Margin="0,0,0,8" />
+                <TextBlock Text="ADVANCED" Style="{StaticResource RetroSectionLabel}" />
+                <ui:CardExpander Header="Generation Parameters" Margin="0,0,0,5"
+                                 Background="{StaticResource RetroCard}"
+                                 BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+                    <StackPanel Margin="2,1,2,2">
+                        <TextBlock Text="Temperature" FontSize="10" Opacity="0.6" />
+                        <Slider Value="{Binding Temperature}" Minimum="0.1" Maximum="2.0" Margin="0,0,0,3" />
 
-                        <TextBlock Text="Top P" FontSize="11" Opacity="0.6" />
-                        <Slider Value="{Binding TopP}" Minimum="0.1" Maximum="1.0" Margin="0,0,0,8" />
+                        <TextBlock Text="Top P" FontSize="10" Opacity="0.6" />
+                        <Slider Value="{Binding TopP}" Minimum="0.1" Maximum="1.0" Margin="0,0,0,3" />
 
-                        <TextBlock Text="Top K" FontSize="11" Opacity="0.6" />
-                        <Slider Value="{Binding TopK}" Minimum="1" Maximum="100" Margin="0,0,0,8" />
+                        <TextBlock Text="Top K" FontSize="10" Opacity="0.6" />
+                        <Slider Value="{Binding TopK}" Minimum="1" Maximum="100" Margin="0,0,0,3" />
 
-                        <TextBlock Text="Max Tokens" FontSize="11" Opacity="0.6" />
+                        <TextBlock Text="Max Tokens" FontSize="10" Opacity="0.6" />
                         <Slider Value="{Binding MaxTokens}" Minimum="50" Maximum="500" />
                     </StackPanel>
                 </ui:CardExpander>
 
-                <TextBlock Text="SAVED VOICES" FontSize="11" FontWeight="SemiBold" Opacity="0.5" Margin="0,0,0,6" />
+                <TextBlock Text="SAVED VOICES" Style="{StaticResource RetroSectionLabel}" Margin="0,3,0,2" />
                 <ItemsControl ItemsSource="{Binding SavedVoices}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <ui:CardAction Command="{Binding DataContext.SelectSavedVoiceCommand,
                                            RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                            CommandParameter="{Binding}"
-                                           Margin="0,0,0,4">
+                                           Background="{StaticResource RetroCard}"
+                                           BorderBrush="{StaticResource RetroBorder}" BorderThickness="1"
+                                           Margin="0,0,0,1">
                                 <StackPanel Orientation="Horizontal">
-                                    <ui:SymbolIcon Symbol="Person24" Margin="0,0,8,0" />
-                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <ui:SymbolIcon Symbol="Person24" Margin="0,0,5,0" />
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </ui:CardAction>
                         </DataTemplate>

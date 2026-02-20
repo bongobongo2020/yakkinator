@@ -1,11 +1,44 @@
+# Build output
 bin/
 obj/
+publish/
 *.user
 *.suo
 .vs/
-backend/
-*.wav
-outputs/
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Model checkpoints (large files — distribute separately)
+checkpoints/
+
+# Audio files
+*.wav
+*.mp3
+outputs/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Package output
+*.zip
+release/
+
+# Secrets / env
+.env
+*.env

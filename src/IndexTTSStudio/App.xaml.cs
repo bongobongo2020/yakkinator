@@ -11,8 +11,32 @@ public partial class App : Application
 {
     public static ServiceProvider Services { get; private set; } = null!;
 
+    public App()
+    {
+        // Catch exceptions that happen before the dispatcher loop starts
+        // (e.g. XAML resource loading errors in InitializeComponent)
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            try
+            {
+                System.Windows.MessageBox.Show(
+                    e.ExceptionObject?.ToString() ?? "Unknown error",
+                    "Fatal Startup Error",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+            }
+            catch { }
+        };
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        DispatcherUnhandledException += (s, ex) =>
+        {
+            System.Windows.MessageBox.Show(ex.Exception.ToString(), "Startup Error");
+            ex.Handled = true;
+        };
+
         base.OnStartup(e);
 
         var services = new ServiceCollection();
@@ -26,7 +50,7 @@ public partial class App : Application
         services.AddSingleton<VoiceLibraryService>();
 
         // ViewModels
-        services.AddTransient<MainWindowViewModel>();
+        services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<SetupViewModel>();
         services.AddTransient<GenerateViewModel>();
         services.AddTransient<VoiceLibraryViewModel>();

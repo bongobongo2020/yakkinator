@@ -3,21 +3,22 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:pages="clr-namespace:IndexTTSStudio.Views.Pages"
-        Title="IndexTTS Studio"
-        Width="1100" Height="750"
-        MinWidth="900" MinHeight="600"
-        WindowStartupLocation="CenterScreen"
+        Title="Yakkinator"
+        Width="960" Height="600"
+        MinWidth="760" MinHeight="440"
+        WindowStartupLocation="Manual"
         ExtendsContentIntoTitleBar="True">
 
-    <Grid>
+    <Grid Background="{StaticResource RetroBg}">
         <ui:NavigationView x:Name="NavigationView"
                            PaneDisplayMode="Left"
                            IsBackButtonVisible="Collapsed"
                            IsPaneToggleVisible="True"
-                           OpenPaneLength="220">
+                           OpenPaneLength="160"
+                           Background="{StaticResource RetroBg}">
 
             <ui:NavigationView.Header>
-                <ui:BreadcrumbBar Margin="42,32,0,0" />
+                <ui:BreadcrumbBar Margin="42,6,0,0" />
             </ui:NavigationView.Header>
 
             <ui:NavigationView.MenuItems>
@@ -44,16 +45,10 @@
         </ui:NavigationView>
 
         <!-- Title bar -->
-        <ui:TitleBar Title="IndexTTS Studio"
+        <ui:TitleBar Title="Yakkinator"
                      ShowMaximize="True"
-                     ShowMinimize="True" />
+                     ShowMinimize="True"
+                     Grid.ZIndex="100" />
 
-        <!-- Backend status indicator -->
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
-                    VerticalAlignment="Top" Margin="0,8,150,0">
-            <Ellipse Width="8" Height="8" Margin="0,0,6,0"
-                     Fill="{Binding IsBackendRunning, Converter={StaticResource BoolToColorConverter}, FallbackValue=Red}" />
-            <TextBlock Text="{Binding BackendStatus}" FontSize="11" Opacity="0.7" />
-        </StackPanel>
     </Grid>
 </ui:FluentWindow>

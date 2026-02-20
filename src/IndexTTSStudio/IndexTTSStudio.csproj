@@ -7,6 +7,8 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
     <RootNamespace>IndexTTSStudio</RootNamespace>
+    <AssemblyName>Yakkinator</AssemblyName>
+    <Product>Yakkinator</Product>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WPF-UI" Version="3.*" />

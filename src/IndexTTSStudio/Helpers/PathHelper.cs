@@ -14,6 +14,7 @@ public static class PathHelper
     public static string OutputsDir => Path.Combine(AppDataDir, "outputs");
     public static string SettingsFile => Path.Combine(AppDataDir, "settings.json");
     public static string SetupStateFile => Path.Combine(AppDataDir, "setup-state.json");
+    public static string LogFile => Path.Combine(AppDataDir, "app.log");
 
     /// <summary>
     /// Path to the api_server.py bundled with the .NET app.

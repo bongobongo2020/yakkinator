@@ -4,6 +4,13 @@ FastAPI wrapper around IndexTTS-2 inference engine.
 Launched as a subprocess by the .NET application.
 """
 import sys
+import io
+# Force UTF-8 encoding for stdout/stderr to prevent charmap errors on Windows
+# when the IndexTTS tokenizer emits SentencePiece markers (e.g. \u2581 ▁).
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 import os
 import uuid
 import time

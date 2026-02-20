@@ -20,6 +20,75 @@
             <converters:NullToVisConverter x:Key="NullToVisConverter" />
             <converters:GenerateButtonTextConverter x:Key="GenerateButtonTextConverter" />
             <converters:PlayButtonTextConverter x:Key="PlayButtonTextConverter" />
+
+            <!-- ===== RETRO COLOR PALETTE ===== -->
+            <SolidColorBrush x:Key="RetroBg"     Color="#0E0820" />
+            <SolidColorBrush x:Key="RetroCard"   Color="#1D1140" />
+            <SolidColorBrush x:Key="RetroBorder" Color="#7B3FE4" />
+            <SolidColorBrush x:Key="RetroCyan"   Color="#00E5FF" />
+            <SolidColorBrush x:Key="RetroMuted"  Color="#7B6A9E" />
+
+            <!-- ===== SECTION LABEL STYLE ===== -->
+            <Style x:Key="RetroSectionLabel" TargetType="TextBlock">
+                <Setter Property="FontSize"   Value="9" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Foreground" Value="{StaticResource RetroCyan}" />
+                <Setter Property="Margin"     Value="0,0,0,2" />
+                <Setter Property="Opacity"    Value="0.9" />
+            </Style>
+
+            <!-- ===== BOUNCE BUTTON STYLE ===== -->
+            <!-- Extends WPF-UI button with a spring-bounce press animation -->
+            <Style x:Key="BounceButton" TargetType="{x:Type ui:Button}"
+                   BasedOn="{StaticResource {x:Type ui:Button}}">
+                <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+                <Setter Property="RenderTransform">
+                    <Setter.Value>
+                        <ScaleTransform ScaleX="1" ScaleY="1" />
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Trigger.EnterActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation
+                                        Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleX)"
+                                        To="0.91" Duration="0:0:0.05" />
+                                    <DoubleAnimation
+                                        Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleY)"
+                                        To="0.91" Duration="0:0:0.05" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </Trigger.EnterActions>
+                        <Trigger.ExitActions>
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimationUsingKeyFrames
+                                        Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleX)">
+                                        <SplineDoubleKeyFrame KeyTime="0:0:0.10" Value="1.10"
+                                            KeySpline="0.33,1,0.68,1" />
+                                        <SplineDoubleKeyFrame KeyTime="0:0:0.18" Value="0.97"
+                                            KeySpline="0.33,1,0.68,1" />
+                                        <SplineDoubleKeyFrame KeyTime="0:0:0.25" Value="1.0"
+                                            KeySpline="0.33,1,0.68,1" />
+                                    </DoubleAnimationUsingKeyFrames>
+                                    <DoubleAnimationUsingKeyFrames
+                                        Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleY)">
+                                        <SplineDoubleKeyFrame KeyTime="0:0:0.10" Value="1.10"
+                                            KeySpline="0.33,1,0.68,1" />
+                                        <SplineDoubleKeyFrame KeyTime="0:0:0.18" Value="0.97"
+                                            KeySpline="0.33,1,0.68,1" />
+                                        <SplineDoubleKeyFrame KeyTime="0:0:0.25" Value="1.0"
+                                            KeySpline="0.33,1,0.68,1" />
+                                    </DoubleAnimationUsingKeyFrames>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </Trigger.ExitActions>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>

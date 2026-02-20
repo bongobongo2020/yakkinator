@@ -1,5 +1,7 @@
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using IndexTTSStudio.Helpers;
 using IndexTTSStudio.Models;
 using IndexTTSStudio.Services;
 using Microsoft.Win32;
@@ -11,6 +13,10 @@ public partial class GenerateViewModel : ObservableObject
     private readonly TTSApiClient _apiClient;
     private readonly AudioPlayerService _audioPlayer;
     private readonly VoiceLibraryService _voiceLibrary;
+    private readonly MainWindowViewModel _mainVm;
+
+    public bool IsBackendRunning => _mainVm.IsBackendRunning;
+    public string BackendStatus => _mainVm.BackendStatus;
 
     [ObservableProperty] private string _text = "";
     [ObservableProperty] private string _voiceFilePath = "";
@@ -40,15 +46,29 @@ public partial class GenerateViewModel : ObservableObject
     [ObservableProperty] private bool _isPlaying;
     [ObservableProperty] private string _statusText = "Ready";
     [ObservableProperty] private string? _lastOutputPath;
+    [ObservableProperty] private bool _hasError;
+    [ObservableProperty] private string _errorMessage = "";
 
     // Voice library
     [ObservableProperty] private List<VoiceProfile> _savedVoices = [];
 
-    public GenerateViewModel(TTSApiClient apiClient, AudioPlayerService audioPlayer, VoiceLibraryService voiceLibrary)
+    public GenerateViewModel(TTSApiClient apiClient, AudioPlayerService audioPlayer, VoiceLibraryService voiceLibrary, MainWindowViewModel mainVm)
     {
         _apiClient = apiClient;
         _audioPlayer = audioPlayer;
         _voiceLibrary = voiceLibrary;
+        _mainVm = mainVm;
+        _mainVm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainWindowViewModel.IsBackendRunning))
+            {
+                OnPropertyChanged(nameof(IsBackendRunning));
+                if (_mainVm.IsBackendRunning)
+                    StatusText = "Backend ready";
+            }
+            else if (e.PropertyName == nameof(MainWindowViewModel.BackendStatus))
+                OnPropertyChanged(nameof(BackendStatus));
+        };
         _audioPlayer.OnPlaybackStopped += () =>
             App.Current.Dispatcher.Invoke(() => IsPlaying = false);
         RefreshVoices();
@@ -106,6 +126,7 @@ public partial class GenerateViewModel : ObservableObject
         }
 
         IsGenerating = true;
+        HasError = false;
         StatusText = "Generating speech...";
 
         try
@@ -133,16 +154,18 @@ public partial class GenerateViewModel : ObservableObject
             }
             else
             {
-                StatusText = $"Generation failed: {result.ErrorMessage}";
+                ShowError(result.ErrorMessage ?? "Unknown error");
             }
         }
         catch (Exception ex)
         {
-            StatusText = $"Error: {ex.Message}";
+            ShowError(ex.Message);
         }
         finally
         {
             IsGenerating = false;
+            if (!HasError)
+                StatusText = "Backend ready";
         }
     }
 
@@ -170,6 +193,21 @@ public partial class GenerateViewModel : ObservableObject
         var name = System.IO.Path.GetFileNameWithoutExtension(VoiceFilePath);
         _voiceLibrary.SaveVoice(name, VoiceFilePath);
         RefreshVoices();
+    }
+
+    private void ShowError(string message)
+    {
+        ErrorMessage = message;
+        HasError = true;
+        StatusText = "Generation failed";
+
+        try
+        {
+            PathHelper.EnsureDirectories();
+            File.AppendAllText(PathHelper.LogFile,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ERROR: {message}{Environment.NewLine}");
+        }
+        catch { /* log write failure is non-fatal */ }
     }
 
     private void RefreshVoices()

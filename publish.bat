@@ -16,6 +16,9 @@ echo  Output    : %OUTPUT%
 echo ============================================================
 echo.
 
+REM Clean output directory first
+if exist "%OUTPUT%" rmdir /s /q "%OUTPUT%"
+
 dotnet publish "%PROJECT%" ^
   --configuration %CONFIG% ^
   --runtime %RID% ^

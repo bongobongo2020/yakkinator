@@ -4,6 +4,13 @@ FastAPI wrapper around IndexTTS-2 inference engine.
 Launched as a subprocess by the .NET application.
 """
 import sys
+import io
+# Force UTF-8 encoding for stdout/stderr to prevent charmap errors on Windows
+# when the IndexTTS tokenizer emits SentencePiece markers (e.g. \u2581 ▁).
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 import os
 import uuid
 import time
@@ -33,13 +40,13 @@ async def lifespan(app: FastAPI):
 
     try:
         from indextts.infer_v2 import IndexTTS2
-        tts_engine = IndexTTS2(cfg_path=config_path, model_dir=model_dir, is_fp16=use_fp16)
+        tts_engine = IndexTTS2(cfg_path=config_path, model_dir=model_dir, use_fp16=use_fp16)
         model_version = "IndexTTS-2"
         print("[API] IndexTTS-2 loaded successfully.")
     except ImportError:
         try:
             from indextts.infer import IndexTTS
-            tts_engine = IndexTTS(cfg_path=config_path, model_dir=model_dir, is_fp16=use_fp16)
+            tts_engine = IndexTTS(cfg_path=config_path, model_dir=model_dir, use_fp16=use_fp16)
             model_version = "IndexTTS-1.5"
             print("[API] IndexTTS-1.5 loaded successfully.")
         except Exception as e:

@@ -1,0 +1,251 @@
+# Task: Compact & Beautify UI — Reduce Vertical Overflow
+
+## 1. Context & Objective
+The UI is too tall and requires scrolling to see bottom elements on a standard screen. All pages need tighter margins, smaller section headers, and reduced spacing so the full Generate page fits without scrolling. Visual hierarchy should be preserved but density increased. Only XAML layout files should be touched — no C# or ViewModel changes.
+
+---
+
+## 2. Files to Modify
+
+### `src/IndexTTSStudio/Views/Windows/MainWindow.xaml`
+- `OpenPaneLength="220"` → `OpenPaneLength="180"`
+
+---
+
+### `src/IndexTTSStudio/Views/Pages/GeneratePage.xaml`
+
+**Root Grid:**
+- `Margin="16,8,16,12"` → `Margin="10,4,10,6"`
+
+**Page title TextBlock (`Generate Speech`):**
+- `FontSize="20"` → `FontSize="15"`
+- `Margin="0,0,0,10"` → `Margin="0,0,0,6"`
+
+**All three section-label TextBlocks** (REFERENCE VOICE, TEXT TO SPEAK, EMOTION CONTROL):
+- `Margin="0,0,0,4"` → `Margin="0,0,0,2"`
+
+**Voice selection `ui:Card`:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+- Inner `VoiceFileName` TextBlock: `FontSize="14"` → `FontSize="13"`
+
+**Text input `ui:TextBox`:**
+- `MinHeight="80"` → `MinHeight="56"`
+- `MaxHeight="160"` → `MaxHeight="110"`
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+
+**Emotion Control `ui:Card`:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+- Inner `StackPanel`: `Margin="4"` → `Margin="2"`
+- Radio button row `StackPanel`: `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+
+**Audio emotion sub-panel:**
+- `Margin="0,8,0,0"` → `Margin="0,4,0,0"`
+- Blend Strength `Slider`: `Width="200"` → `Width="150"`
+
+**Vector sliders sub-panel:**
+- `Margin="0,8,0,0"` → `Margin="0,4,0,0"`
+- All 8 `<RowDefinition />` elements inside that Grid: add `Height="22"` to each, e.g. `<RowDefinition Height="22" />`
+
+**Text emotion sub-panel:**
+- `Margin="0,8,0,0"` → `Margin="0,4,0,0"`
+- Strength `Slider`: `Width="200"` → `Width="150"`
+
+**Generate + Play buttons row `StackPanel`:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+- Generate `ui:Button`: `Height="40"` → `Height="34"`, `FontSize="14"` → `FontSize="13"`
+- Play `ui:Button`: `Height="40"` → `Height="34"`
+
+**Error `ui:InfoBar`:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+
+**Sidebar ADVANCED label:**
+- `Margin="0,0,0,4"` → `Margin="0,0,0,2"`
+
+**Sidebar `ui:CardExpander` (Generation Parameters):**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+- Inner `StackPanel`: `Margin="8"` → `Margin="4,2,4,2"`
+- All four slider `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+
+**Sidebar SAVED VOICES label:**
+- `Margin="0,0,0,4"` → `Margin="0,4,0,2"`
+
+**Saved voice `ui:CardAction` items:**
+- `Margin="0,0,0,4"` → `Margin="0,0,0,2"`
+
+---
+
+### `src/IndexTTSStudio/Views/Pages/SettingsPage.xaml`
+
+**Root `StackPanel`:**
+- `Margin="16,8,16,12"` → `Margin="10,4,10,6"`
+
+**Title TextBlock (`Settings`):**
+- `FontSize="20"` → `FontSize="15"`
+- `Margin="0,0,0,10"` → `Margin="0,0,0,6"`
+
+**"Default Generation Parameters" inner TextBlock:**
+- `FontSize="14"` → `FontSize="13"`
+- `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+
+**Each slider in the default parameters card:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+
+---
+
+### `src/IndexTTSStudio/Views/Pages/SetupPage.xaml`
+
+**Root `StackPanel`:**
+- `Margin="16,8,16,12"` → `Margin="10,4,10,6"`
+
+**Title TextBlock (`First-Time Setup`):**
+- `FontSize="20"` → `FontSize="15"`
+- `Margin="0,0,0,6"` → `Margin="0,0,0,4"`
+
+**Subtitle TextBlock:**
+- `Margin="0,0,0,12"` → `Margin="0,0,0,8"`
+
+**All `ui:CardExpander` elements:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+- Inner `StackPanel`: `Margin="8"` → `Margin="4,2,4,2"`
+
+**Progress `ui:Card`:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+- Inner `StackPanel`: `Margin="8"` → `Margin="4,2,4,2"`
+- StatusText `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+- ProgressBar `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+- Button row `StackPanel`: `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+
+**Setup Log TextBox:**
+- `MaxHeight="300"` → `MaxHeight="180"`
+
+---
+
+### `src/IndexTTSStudio/Views/Pages/HistoryPage.xaml`
+
+**Root `StackPanel`:**
+- `Margin="16,8,16,12"` → `Margin="10,4,10,6"`
+
+**Header `Grid`:**
+- `Margin="0,0,0,10"` → `Margin="0,0,0,6"`
+
+**Title TextBlock (`Output History`):**
+- `FontSize="20"` → `FontSize="15"`
+
+**History item `ui:Card` elements:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+
+---
+
+### `src/IndexTTSStudio/Views/Pages/VoiceLibraryPage.xaml`
+
+**Root `StackPanel`:**
+- `Margin="16,8,16,12"` → `Margin="10,4,10,6"`
+
+**Header `Grid`:**
+- `Margin="0,0,0,10"` → `Margin="0,0,0,6"`
+
+**Title TextBlock (`Voice Library`):**
+- `FontSize="20"` → `FontSize="15"`
+
+**Subtitle TextBlock:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,5"`
+
+**Voice item `ui:Card` elements:**
+- `Margin="0,0,0,8"` → `Margin="0,0,0,4"`
+
+---
+
+## 3. Implementation Steps
+1. Apply changes to `MainWindow.xaml`
+2. Apply changes to `GeneratePage.xaml` (most impactful — ensure vector slider rows each get `Height="22"`)
+3. Apply changes to `SettingsPage.xaml`
+4. Apply changes to `SetupPage.xaml`
+5. Apply changes to `HistoryPage.xaml`
+6. Apply changes to `VoiceLibraryPage.xaml`
+7. **XAML layout only** — do not change any C# code, ViewModels, or bindings
+
+## 4. Completion Instructions
+Update this file with a "Changelog" section listing every file modified and the specific attribute changes made.
+
+---
+
+## 5. Changelog
+
+### 2026-02-20: UI Compaction Implementation
+
+**Modified Files (6 XAML files, no C# changes):**
+
+1. **`src/IndexTTSStudio/Views/Windows/MainWindow.xaml`**
+   - NavigationView `OpenPaneLength`: 220 → 180
+
+2. **`src/IndexTTSStudio/Views/Pages/GeneratePage.xaml`**
+   - Root Grid margin: `16,8,16,12` → `10,4,10,6`
+   - Page title FontSize: 20 → 15, Margin: `0,0,0,10` → `0,0,0,6`
+   - Section label margins: `0,0,0,4` → `0,0,0,2` (3 instances)
+   - Voice card margin: `0,0,0,8` → `0,0,0,5`
+   - VoiceFileName FontSize: 14 → 13
+   - TextBox MinHeight: 80 → 56, MaxHeight: 160 → 110, margin: `0,0,0,8` → `0,0,0,5`
+   - Emotion Control card margin: `0,0,0,8` → `0,0,0,5`
+   - Emotion Control inner StackPanel margin: 4 → 2
+   - Radio button row margin: `0,0,0,8` → `0,0,0,4`
+   - Audio emotion sub-panel margin: `0,8,0,0` → `0,4,0,0`
+   - Blend Strength Slider Width: 200 → 150
+   - Vector sliders sub-panel margin: `0,8,0,0` → `0,4,0,0`
+   - All 8 RowDefinition elements added `Height="22"`
+   - Text emotion sub-panel margin: `0,8,0,0` → `0,4,0,0`
+   - Text emotion Slider Width: 200 → 150, containing StackPanel margin: `0,8,0,0` → `0,4,0,0`
+   - Generate+Play buttons row margin: `0,0,0,8` → `0,0,0,5`
+   - Generate button Height: 40 → 34, FontSize: 14 → 13
+   - Play button Height: 40 → 34
+   - Error InfoBar margin: `0,0,0,8` → `0,0,0,5`
+   - ADVANCED label margin: `0,0,0,4` → `0,0,0,2`
+   - Generation Parameters CardExpander margin: `0,0,0,8` → `0,0,0,5`
+   - Generation Parameters inner StackPanel margin: `8` → `4,2,4,2`
+   - All 4 sliders in Generation Parameters: margin `0,0,0,8` → `0,0,0,4`
+   - SAVED VOICES label margin: `0,0,0,4` → `0,4,0,2`
+   - Saved voice CardAction items margin: `0,0,0,4` → `0,0,0,2`
+
+3. **`src/IndexTTSStudio/Views/Pages/SettingsPage.xaml`**
+   - Root StackPanel margin: `16,8,16,12` → `10,4,10,6`
+   - Title FontSize: 20 → 15, Margin: `0,0,0,10` → `0,0,0,6`
+   - Default Generation Parameters FontSize: 14 → 13, Margin: `0,0,0,8` → `0,0,0,4`
+   - Temperature slider margin: `0,0,0,8` → `0,0,0,4`
+   - Top P slider margin: `0,0,0,8` → `0,0,0,4`
+
+4. **`src/IndexTTSStudio/Views/Pages/SetupPage.xaml`**
+   - Root StackPanel margin: `16,8,16,12` → `10,4,10,6`
+   - Title FontSize: 20 → 15, Margin: `0,0,0,6` → `0,0,0,4`
+   - Subtitle margin: `0,0,0,12` → `0,0,0,8`
+   - Prerequisites CardExpander margin: `0,0,0,8` → `0,0,0,5`
+   - Prerequisites inner StackPanel margin: `8` → `4,2,4,2`
+   - What will be installed CardExpander margin: `0,0,0,8` → `0,0,0,5`
+   - What will be installed inner StackPanel margin: `8` → `4,2,4,2`
+   - Progress card margin: `0,0,0,8` → `0,0,0,5`
+   - Progress inner StackPanel margin: `8` → `4,2,4,2`
+   - StatusText margin: `0,0,0,8` → `0,0,0,4`
+   - ProgressBar margin: `0,0,0,8` → `0,0,0,4`
+   - Button row StackPanel margin: `0,0,0,8` → `0,0,0,4`
+   - Setup Log MaxHeight: 300 → 180
+
+5. **`src/IndexTTSStudio/Views/Pages/HistoryPage.xaml`**
+   - Root StackPanel margin: `16,8,16,12` → `10,4,10,6`
+   - Header Grid margin: `0,0,0,10` → `0,0,0,6`
+   - Title FontSize: 20 → 15
+   - History item Card margin: `0,0,0,8` → `0,0,0,4`
+
+6. **`src/IndexTTSStudio/Views/Pages/VoiceLibraryPage.xaml`**
+   - Root StackPanel margin: `16,8,16,12` → `10,4,10,6`
+   - Header Grid margin: `0,0,0,10` → `0,0,0,6`
+   - Title FontSize: 20 → 15
+   - Subtitle margin: `0,0,0,8` → `0,0,0,5`
+   - Voice item Card margin: `0,0,0,8` → `0,0,0,4`
+
+**Summary:**
+- Reduced navigation pane width by 40px
+- Reduced page margins across all pages by ~40%
+- Reduced title font sizes from 20 to 15
+- Reduced card margins from 8 to 4-5
+- Reduced button heights from 40 to 34
+- Reduced slider widths from 200 to 150
+- Added explicit row heights (22px) to vector sliders for tighter spacing
+- No C# or ViewModel changes — XAML layout only

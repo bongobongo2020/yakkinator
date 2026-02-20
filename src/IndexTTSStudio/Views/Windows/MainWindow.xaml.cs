@@ -26,6 +26,23 @@ public partial class MainWindow : FluentWindow
         Loaded += OnLoaded;
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        var workArea = SystemParameters.WorkArea;
+
+        // Shrink window if it exceeds the available work area
+        if (Width > workArea.Width) Width = workArea.Width;
+        if (Height > workArea.Height) Height = workArea.Height;
+
+        // Center, then clamp to work area
+        Left = workArea.Left + (workArea.Width - Width) / 2;
+        Top = workArea.Top + (workArea.Height - Height) / 2;
+        if (Left < workArea.Left) Left = workArea.Left;
+        if (Top < workArea.Top) Top = workArea.Top;
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         // Set up page navigation service
@@ -42,6 +59,7 @@ public partial class MainWindow : FluentWindow
             NavigationView.Navigate(typeof(GeneratePage));
             await StartBackendAsync();
         }
+
     }
 
     private async Task StartBackendAsync()
