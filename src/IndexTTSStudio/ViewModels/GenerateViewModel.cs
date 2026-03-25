@@ -151,6 +151,7 @@ public partial class GenerateViewModel : ObservableObject
             {
                 LastOutputPath = result.AudioFilePath;
                 StatusText = $"Generation complete! ({result.JobId})";
+                _voiceLibrary.LastUsedVoicePath = VoiceFilePath;
             }
             else
             {

@@ -23,6 +23,23 @@
             </StackPanel>
         </ui:Card>
 
+        <ui:Card Margin="0,0,0,4" Padding="8,5,8,5"
+                 Background="{StaticResource RetroCard}"
+                 BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+            <StackPanel>
+                <TextBlock Text="Output Directory" FontSize="12" Margin="0,0,0,2" />
+                <TextBlock Text="Generated files will be copied here in addition to the default location." Opacity="0.6" FontSize="10" Margin="0,0,0,4" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Grid.Column="0" Text="{Binding OutputDirectory}" PlaceholderText="Leave empty to use default only" Margin="0,0,4,0" />
+                    <ui:Button Grid.Column="1" Content="Browse" Icon="{ui:SymbolIcon Folder24}" Command="{Binding BrowseOutputDirectoryCommand}" />
+                </Grid>
+            </StackPanel>
+        </ui:Card>
+
         <ui:Card Margin="0,0,0,6" Padding="8,5,8,5"
                  Background="{StaticResource RetroCard}"
                  BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">

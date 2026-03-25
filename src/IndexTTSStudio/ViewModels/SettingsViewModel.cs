@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using IndexTTSStudio.Services;
+using Microsoft.Win32;
 
 namespace IndexTTSStudio.ViewModels;
 
@@ -13,6 +14,7 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private float _defaultTemperature;
     [ObservableProperty] private float _defaultTopP;
     [ObservableProperty] private int _defaultTopK;
+    [ObservableProperty] private string _outputDirectory = "";
 
     public SettingsViewModel(SettingsService settingsService)
     {
@@ -23,6 +25,18 @@ public partial class SettingsViewModel : ObservableObject
         DefaultTemperature = s.DefaultTemperature;
         DefaultTopP = s.DefaultTopP;
         DefaultTopK = s.DefaultTopK;
+        OutputDirectory = s.OutputDirectory;
+    }
+
+    [RelayCommand]
+    private void BrowseOutputDirectory()
+    {
+        var dlg = new OpenFolderDialog
+        {
+            Title = "Select Output Directory"
+        };
+        if (dlg.ShowDialog() == true)
+            OutputDirectory = dlg.FolderName;
     }
 
     [RelayCommand]
@@ -34,6 +48,7 @@ public partial class SettingsViewModel : ObservableObject
         s.DefaultTemperature = DefaultTemperature;
         s.DefaultTopP = DefaultTopP;
         s.DefaultTopK = DefaultTopK;
+        s.OutputDirectory = OutputDirectory;
         _settingsService.Save();
     }
 }

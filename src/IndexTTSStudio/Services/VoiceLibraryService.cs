@@ -6,6 +6,8 @@ namespace IndexTTSStudio.Services;
 
 public class VoiceLibraryService
 {
+    public string? LastUsedVoicePath { get; set; }
+
     public List<VoiceProfile> GetVoices()
     {
         var dir = PathHelper.VoicesDir;

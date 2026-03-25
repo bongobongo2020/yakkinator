@@ -10,11 +10,13 @@ public class TTSApiClient : IDisposable
 {
     private readonly HttpClient _http;
     private readonly string _baseUrl;
+    private readonly SettingsService _settingsService;
 
-    public TTSApiClient(int port = 5299)
+    public TTSApiClient(int port, SettingsService settingsService)
     {
         _baseUrl = $"http://127.0.0.1:{port}";
         _http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        _settingsService = settingsService;
     }
 
     public async Task<bool> IsHealthyAsync()
@@ -87,6 +89,13 @@ public class TTSApiClient : IDisposable
         var outputPath = Path.Combine(PathHelper.OutputsDir, $"{jobId}.wav");
         var audioData = await response.Content.ReadAsByteArrayAsync(ct);
         await File.WriteAllBytesAsync(outputPath, audioData, ct);
+
+        var customDir = _settingsService.Settings.OutputDirectory;
+        if (!string.IsNullOrWhiteSpace(customDir) && Directory.Exists(customDir))
+        {
+            var copyPath = Path.Combine(customDir, $"{jobId}.wav");
+            await File.WriteAllBytesAsync(copyPath, audioData, ct);
+        }
 
         return new TTSResponse
         {

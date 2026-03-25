@@ -32,16 +32,26 @@ public partial class VoiceLibraryViewModel : ObservableObject
     [RelayCommand]
     private void AddVoice()
     {
-        var dlg = new OpenFileDialog
+        var path = _voiceLibrary.LastUsedVoicePath;
+        if (!string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
         {
-            Filter = "Audio Files|*.wav;*.mp3;*.flac",
-            Title = "Add Voice to Library"
-        };
-        if (dlg.ShowDialog() == true)
-        {
-            var name = System.IO.Path.GetFileNameWithoutExtension(dlg.FileName);
-            _voiceLibrary.SaveVoice(name, dlg.FileName);
+            var name = System.IO.Path.GetFileNameWithoutExtension(path);
+            _voiceLibrary.SaveVoice(name, path);
             Refresh();
+        }
+        else
+        {
+            var dlg = new OpenFileDialog
+            {
+                Filter = "Audio Files|*.wav;*.mp3;*.flac",
+                Title = "Add Voice to Library"
+            };
+            if (dlg.ShowDialog() == true)
+            {
+                var name = System.IO.Path.GetFileNameWithoutExtension(dlg.FileName);
+                _voiceLibrary.SaveVoice(name, dlg.FileName);
+                Refresh();
+            }
         }
     }
 

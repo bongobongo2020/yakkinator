@@ -41,7 +41,7 @@ public partial class App : Application
         services.AddSingleton<PythonBackendService>(sp =>
             new PythonBackendService(sp.GetRequiredService<SettingsService>().Settings.ApiPort));
         services.AddSingleton<TTSApiClient>(sp =>
-            new TTSApiClient(sp.GetRequiredService<SettingsService>().Settings.ApiPort));
+            new TTSApiClient(sp.GetRequiredService<SettingsService>().Settings.ApiPort, sp.GetRequiredService<SettingsService>()));
         services.AddSingleton<AudioPlayerService>();
         services.AddSingleton<VoiceLibraryService>();
 
