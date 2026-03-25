@@ -38,6 +38,18 @@ async def lifespan(app: FastAPI):
 
     print(f"[API] Loading IndexTTS-2 from {model_dir} (fp16={use_fp16})...")
 
+    # Check if model directory exists
+    if not os.path.exists(model_dir):
+        print(f"[API] FATAL: Model directory does not exist: {model_dir}")
+        print(f"[API] Please run Setup to download models.")
+        sys.exit(1)
+
+    # Check if config.yaml exists
+    if not os.path.exists(config_path):
+        print(f"[API] FATAL: config.yaml not found in {model_dir}")
+        print(f"[API] Please run Setup to download models.")
+        sys.exit(1)
+
     try:
         from indextts.infer_v2 import IndexTTS2
         tts_engine = IndexTTS2(cfg_path=config_path, model_dir=model_dir, use_fp16=use_fp16)

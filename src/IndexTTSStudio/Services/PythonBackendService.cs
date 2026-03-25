@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using IndexTTSStudio.Helpers;
 
@@ -11,9 +12,11 @@ public class PythonBackendService : IDisposable
     private Process? _backendProcess;
     private readonly int _port;
     private readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private readonly StringBuilder _fullLog = new();
 
     public event Action<string>? OnLog;
     public bool IsRunning => _backendProcess is { HasExited: false };
+    public string FullLog => _fullLog.ToString();
 
     public PythonBackendService(int port = 5299)
     {
@@ -47,11 +50,19 @@ public class PythonBackendService : IDisposable
 
         _backendProcess.OutputDataReceived += (_, e) =>
         {
-            if (e.Data != null) OnLog?.Invoke(e.Data);
+            if (e.Data != null)
+            {
+                _fullLog.AppendLine($"[STDOUT] {e.Data}");
+                OnLog?.Invoke(e.Data);
+            }
         };
         _backendProcess.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data != null) OnLog?.Invoke(e.Data);
+            if (e.Data != null)
+            {
+                _fullLog.AppendLine($"[STDERR] {e.Data}");
+                OnLog?.Invoke(e.Data);
+            }
         };
 
         _backendProcess.Start();
@@ -67,7 +78,12 @@ public class PythonBackendService : IDisposable
             ct.ThrowIfCancellationRequested();
             // Bail early if the process already died (crash during model load)
             if (_backendProcess.HasExited)
-                throw new InvalidOperationException($"Backend process exited unexpectedly (code {_backendProcess.ExitCode}). Check that models are installed correctly.");
+            {
+                throw new InvalidOperationException(
+                    $"Backend process exited unexpectedly (exit code: {_backendProcess.ExitCode}). " +
+                    $"Common causes: missing model files, missing dependencies, or corrupted installation. " +
+                    $"Run Setup again to fix.");
+            }
 
             try
             {
@@ -89,7 +105,10 @@ public class PythonBackendService : IDisposable
             await Task.Delay(2000, ct);
         }
 
-        throw new TimeoutException("Backend failed to start within the timeout period.");
+        throw new TimeoutException(
+            $"Backend failed to start within {maxWait.TotalMinutes:F1} minutes. " +
+            $"The model may still be loading, or checkpoints may be missing at {PathHelper.CheckpointsDir}. " +
+            $"Run Setup again if needed.");
     }
 
     public async Task StopAsync()
@@ -106,6 +125,11 @@ public class PythonBackendService : IDisposable
         {
             _backendProcess.Kill(entireProcessTree: true);
         }
+    }
+
+    public void SaveLogToFile(string path)
+    {
+        File.WriteAllText(path, _fullLog.ToString());
     }
 
     public void Dispose()

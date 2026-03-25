@@ -49,6 +49,99 @@ public class SetupService
         OnProgressChanged?.Invoke(pct);
     }
 
+    public async Task DownloadModelsAsync(bool force = false, CancellationToken ct = default)
+    {
+        if (!force && _state.ModelsDownloaded)
+        {
+            Status("Models already downloaded. Use force=true to re-download.");
+            return;
+        }
+
+        Status("Downloading IndexTTS-2 models from HuggingFace (2-4 GB)...");
+        Status("Ensuring huggingface-hub CLI with Xet support is installed...");
+
+        // Ensure hf CLI with hf_xet is available (needed for Xet Storage files)
+        await ProcessHelper.RunAsync("uv", "tool install \"huggingface-hub[hf_xet]\" --force",
+            workingDirectory: PathHelper.BackendDir, ct: ct,
+            onOutput: s => Status($"CLI: {s}"));
+
+        Status("Downloading models using hf CLI (supports Xet Storage)...");
+        var (exitCode, output, error) = await ProcessHelper.RunAsync(
+            "uv", "tool run hf download IndexTeam/IndexTTS-2 --local-dir checkpoints",
+            workingDirectory: PathHelper.BackendDir, ct: ct,
+            onOutput: s => Status($"Download: {s}"));
+
+        if (exitCode != 0)
+        {
+            var errorLines = error.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            var actualErrors = string.Join("\n", errorLines.Where(line =>
+                !line.Contains("FutureWarning") && !line.Contains("DeprecationWarning") &&
+                !line.Contains("Xet Storage") && !string.IsNullOrWhiteSpace(line)));
+
+            if (!string.IsNullOrEmpty(actualErrors))
+            {
+                _state.ErrorMessage = $"Download failed (exit {exitCode}):\n{actualErrors}";
+                SaveState();
+                throw new InvalidOperationException(_state.ErrorMessage);
+            }
+        }
+
+        // Verify critical files — if any are missing, try a targeted per-file download
+        // using hf_hub_download inside the project venv (where hf_xet is installed).
+        Status("Verifying downloaded files...");
+        var criticalFiles = new[] { "gpt.pth", "config.yaml", "wav2vec2bert_stats.pt" };
+        var missing = criticalFiles
+            .Where(f => !File.Exists(Path.Combine(PathHelper.BackendDir, "checkpoints", f)))
+            .ToList();
+
+        if (missing.Count > 0)
+        {
+            Status($"Some files are missing ({string.Join(", ", missing)}), retrying with direct download...");
+
+            // Install hf_xet into the project venv so hf_hub_download can use it
+            await ProcessHelper.RunAsync("uv", "pip install \"huggingface_hub[hf_xet]\"",
+                workingDirectory: PathHelper.BackendDir, ct: ct,
+                onOutput: s => Status($"  {s}"));
+
+            foreach (var file in missing)
+            {
+                Status($"Downloading {file}...");
+                var script = $@"
+import sys, os
+os.makedirs('checkpoints', exist_ok=True)
+from huggingface_hub import hf_hub_download
+path = hf_hub_download(
+    repo_id='IndexTeam/IndexTTS-2',
+    filename='{file}',
+    local_dir='checkpoints',
+    local_dir_use_symlinks=False,
+)
+print(f'Downloaded: {{path}}')
+";
+                var scriptPath = Path.Combine(PathHelper.BackendDir, "_dl_file.py");
+                File.WriteAllText(scriptPath, script);
+                var (rc, _, _) = await ProcessHelper.RunAsync("uv", $"run python \"{scriptPath}\"",
+                    workingDirectory: PathHelper.BackendDir, ct: ct,
+                    onOutput: s => Status($"  {s}"));
+                if (File.Exists(scriptPath)) File.Delete(scriptPath);
+
+                if (!File.Exists(Path.Combine(PathHelper.BackendDir, "checkpoints", file)))
+                {
+                    _state.ErrorMessage = $"Failed to download {file} even with direct method. " +
+                                          "Check your internet connection and try again.";
+                    SaveState();
+                    throw new InvalidOperationException(_state.ErrorMessage);
+                }
+            }
+        }
+
+        _state.ModelsDownloaded = true;
+        _state.LastSetupDate = DateTime.UtcNow;
+        _state.ErrorMessage = null;
+        SaveState();
+        Status("Model download complete! Restart the app to start the backend.");
+    }
+
     public async Task RunFullSetupAsync(CancellationToken ct = default)
     {
         PathHelper.EnsureDirectories();
@@ -161,40 +254,93 @@ public class SetupService
         await ProcessHelper.RunAsync("uv", "pip install fastapi uvicorn python-multipart",
             workingDirectory: PathHelper.BackendDir, ct: ct);
 
-        // Step 7: Download models
+        // Step 7: Download models using the official IndexTTS method
         if (!_state.ModelsDownloaded)
         {
-            Status("Downloading IndexTTS-2 models from HuggingFace (2-4 GB)...");
+            Status("Downloading IndexTTS-2 models (this may take 10-30 minutes)...");
 
-            // Use huggingface-hub to download models
-            var downloadScript = @"
-from huggingface_hub import snapshot_download
-import sys
-try:
-    snapshot_download(
-        repo_id='IndexTeam/IndexTTS-2',
-        local_dir='checkpoints',
-        resume_download=True
-    )
-    print('MODEL_DOWNLOAD_SUCCESS')
-except Exception as e:
-    print(f'MODEL_DOWNLOAD_FAILED: {e}', file=sys.stderr)
-    sys.exit(1)
-";
-            var scriptPath = Path.Combine(PathHelper.BackendDir, "_download_models.py");
-            File.WriteAllText(scriptPath, downloadScript);
+            // Use the official download method recommended by IndexTTS team
+            Status("Installing huggingface-cli tool...");
+            await ProcessHelper.RunAsync("uv", "tool install \"huggingface-hub[hf_xet]\"",
+                workingDirectory: PathHelper.BackendDir, ct: ct);
 
+            Status("Downloading models using hf download (official method)...");
             var (exitCode, output, error) = await ProcessHelper.RunAsync(
-                "uv", $"run python \"{scriptPath}\"",
+                "uv", "tool run hf download IndexTeam/IndexTTS-2 --local-dir checkpoints",
                 workingDirectory: PathHelper.BackendDir, ct: ct,
-                onOutput: s => Status($"Models: {s}"));
+                onOutput: s => Status($"Download: {s}"));
 
-            // Cleanup temp script
+            // Filter out warnings from error message
+            var errorLines = error.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            var actualErrors = string.Join("\n",
+                errorLines
+                    .Where(line => !line.Contains("FutureWarning") &&
+                                  !line.Contains("DeprecationWarning") &&
+                                  !line.Contains("Xet Storage") &&
+                                  !line.Contains("PyDevTerminal") &&
+                                  !line.Contains("site-packages") &&
+                                  !line.TrimStart().StartsWith("at ") &&
+                                  !string.IsNullOrWhiteSpace(line)));
+
+            if (exitCode != 0 && !string.IsNullOrEmpty(actualErrors))
+            {
+                _state.ErrorMessage = $"Failed to download models (exit code: {exitCode}):\n{actualErrors}";
+                SaveState();
+                throw new InvalidOperationException(_state.ErrorMessage);
+            }
+
+            // Verify download succeeded
+            Status("Verifying downloaded files...");
+            var verificationScript = @"
+import os
+import sys
+
+critical_files = ['gpt.pth', 'config.yaml', 'wav2vec2bert_stats.pt']
+missing = []
+
+for f in critical_files:
+    path = os.path.join('checkpoints', f)
+    if not os.path.exists(path):
+        # Check subdirectories
+        found = False
+        for root, dirs, files in os.walk('checkpoints'):
+            if f in files:
+                print(f'Found {f} in subdirectory: {root}')
+                import shutil
+                shutil.copy(os.path.join(root, f), path)
+                found = True
+                break
+        if not found:
+            missing.append(f)
+
+if missing:
+    print(f'MODEL_DOWNLOAD_FAILED: Missing critical files: {missing}', file=sys.stderr)
+    print('Note: Some files may be downloaded automatically on first run.', file=sys.stderr)
+    sys.exit(1)
+
+# List all files
+print('Downloaded files:')
+for item in os.listdir('checkpoints'):
+    item_path = os.path.join('checkpoints', item)
+    if os.path.isfile(item_path):
+        size_mb = os.path.getsize(item_path) / (1024*1024)
+        print(f'  {item} ({size_mb:.1f} MB)')
+
+print('MODEL_DOWNLOAD_SUCCESS')
+";
+
+            var scriptPath = Path.Combine(PathHelper.BackendDir, "_verify_download.py");
+            File.WriteAllText(scriptPath, verificationScript);
+
+            var (verifyExitCode, verifyOutput, verifyError) = await ProcessHelper.RunAsync(
+                "uv", $"run python \"{scriptPath}\"",
+                workingDirectory: PathHelper.BackendDir, ct: ct);
+
             if (File.Exists(scriptPath)) File.Delete(scriptPath);
 
-            if (exitCode != 0 || !output.Contains("MODEL_DOWNLOAD_SUCCESS"))
+            if (verifyExitCode != 0 || !verifyOutput.Contains("MODEL_DOWNLOAD_SUCCESS"))
             {
-                _state.ErrorMessage = $"Failed to download models: {error}";
+                _state.ErrorMessage = $"Model verification failed:\n{verifyError}\n\nOutput:\n{verifyOutput}";
                 SaveState();
                 throw new InvalidOperationException(_state.ErrorMessage);
             }

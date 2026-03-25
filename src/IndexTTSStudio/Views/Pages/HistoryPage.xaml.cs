@@ -1,14 +1,12 @@
 using IndexTTSStudio.ViewModels;
-using Microsoft.Extensions.DependencyInjection;
-using Wpf.Ui.Controls;
 
 namespace IndexTTSStudio.Views.Pages;
 
 public partial class HistoryPage : System.Windows.Controls.Page
 {
-    public HistoryPage()
+    public HistoryPage(HistoryViewModel viewModel)
     {
-        DataContext = App.Services.GetRequiredService<HistoryViewModel>();
+        DataContext = viewModel;
         InitializeComponent();
     }
 }

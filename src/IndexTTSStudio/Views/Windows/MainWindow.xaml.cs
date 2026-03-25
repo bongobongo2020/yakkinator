@@ -1,4 +1,5 @@
 using System.Windows;
+using IndexTTSStudio.Helpers;
 using IndexTTSStudio.Services;
 using IndexTTSStudio.ViewModels;
 using IndexTTSStudio.Views.Pages;
@@ -45,21 +46,30 @@ public partial class MainWindow : FluentWindow
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Set up page navigation service
-        NavigationView.SetServiceProvider(App.Services);
-
-        if (!_setupService.IsSetupComplete)
+        try
         {
-            // Navigate to setup page on first run
-            NavigationView.Navigate(typeof(SetupPage));
-        }
-        else
-        {
-            // Auto-start backend
-            NavigationView.Navigate(typeof(GeneratePage));
-            await StartBackendAsync();
-        }
+            // Set up page navigation service
+            NavigationView.SetServiceProvider(App.Services);
 
+            if (!_setupService.IsSetupComplete)
+            {
+                NavigationView.Navigate(typeof(SetupPage));
+            }
+            else
+            {
+                NavigationView.Navigate(typeof(GeneratePage));
+                await StartBackendAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(
+                $"Failed to initialize the application:\n\n{ex.GetType().Name}: {ex.Message}\n\n{ex.StackTrace}",
+                "Startup Error",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+            Application.Current.Shutdown(1);
+        }
     }
 
     private async Task StartBackendAsync()
@@ -68,7 +78,9 @@ public partial class MainWindow : FluentWindow
         {
             _viewModel.BackendStatus = "Starting...";
             _backend.OnLog += msg => Dispatcher.Invoke(() =>
-                _viewModel.BackendStatus = msg.Length > 50 ? msg[..50] + "..." : msg);
+            {
+                _viewModel.BackendStatus = msg.Length > 50 ? msg[..50] + "..." : msg;
+            });
 
             await _backend.StartAsync();
 
@@ -77,8 +89,36 @@ public partial class MainWindow : FluentWindow
         }
         catch (Exception ex)
         {
-            _viewModel.BackendStatus = $"Error: {ex.Message}";
+            _viewModel.BackendStatus = "Failed to start";
             _viewModel.IsBackendRunning = false;
+
+            // Save full log for debugging
+            var logPath = System.IO.Path.Combine(PathHelper.AppDataDir, "backend_error.log");
+            _backend.SaveLogToFile(logPath);
+
+            // Show a concise error message (full log is in the file)
+            var shortMessage = ex.Message.Length > 300 ? ex.Message[..300] + "..." : ex.Message;
+            var result = System.Windows.MessageBox.Show(
+                $"Failed to start the Python backend.\n\n{shortMessage}\n\n" +
+                $"Full log: {logPath}\n\n" +
+                "Open Setup page to re-download models?",
+                "Backend Startup Error",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Error);
+
+            if (result == System.Windows.MessageBoxResult.Yes)
+            {
+                NavigationView.Navigate(typeof(SetupPage));
+            }
+            else
+            {
+                // Show the log file
+                try
+                {
+                    System.Diagnostics.Process.Start("notepad.exe", logPath);
+                }
+                catch { }
+            }
         }
     }
 }

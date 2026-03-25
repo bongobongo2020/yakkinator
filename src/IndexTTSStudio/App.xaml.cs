@@ -31,12 +31,6 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        DispatcherUnhandledException += (s, ex) =>
-        {
-            System.Windows.MessageBox.Show(ex.Exception.ToString(), "Startup Error");
-            ex.Handled = true;
-        };
-
         base.OnStartup(e);
 
         var services = new ServiceCollection();
@@ -44,8 +38,10 @@ public partial class App : Application
         // Services
         services.AddSingleton<SettingsService>();
         services.AddSingleton<SetupService>();
-        services.AddSingleton<PythonBackendService>();
-        services.AddSingleton<TTSApiClient>();
+        services.AddSingleton<PythonBackendService>(sp =>
+            new PythonBackendService(sp.GetRequiredService<SettingsService>().Settings.ApiPort));
+        services.AddSingleton<TTSApiClient>(sp =>
+            new TTSApiClient(sp.GetRequiredService<SettingsService>().Settings.ApiPort));
         services.AddSingleton<AudioPlayerService>();
         services.AddSingleton<VoiceLibraryService>();
 
@@ -66,8 +62,20 @@ public partial class App : Application
 
         Services = services.BuildServiceProvider();
 
-        var mainWindow = new MainWindow();
-        mainWindow.Show();
+        try
+        {
+            var mainWindow = new MainWindow();
+            mainWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(
+                $"Failed to create main window:\n\n{ex.GetType().Name}: {ex.Message}\n\n{ex.StackTrace}",
+                "Fatal Startup Error",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+            Shutdown(1);
+        }
     }
 
     protected override async void OnExit(ExitEventArgs e)

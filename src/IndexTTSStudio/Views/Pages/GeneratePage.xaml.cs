@@ -1,16 +1,14 @@
 using System.Windows;
 using System.Windows.Controls;
 using IndexTTSStudio.ViewModels;
-using Microsoft.Extensions.DependencyInjection;
-using Wpf.Ui.Controls;
 
 namespace IndexTTSStudio.Views.Pages;
 
 public partial class GeneratePage : System.Windows.Controls.Page
 {
-    public GeneratePage()
+    public GeneratePage(GenerateViewModel viewModel)
     {
-        DataContext = App.Services.GetRequiredService<GenerateViewModel>();
+        DataContext = viewModel;
         InitializeComponent();
     }
 

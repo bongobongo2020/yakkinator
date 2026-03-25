@@ -15,6 +15,7 @@ public partial class SetupViewModel : ObservableObject
     [ObservableProperty] private bool _hasError;
     [ObservableProperty] private string _errorText = "";
     [ObservableProperty] private string _logText = "";
+    [ObservableProperty] private bool _canRedownloadModels;
 
     public SetupViewModel(SetupService setupService)
     {
@@ -33,6 +34,7 @@ public partial class SetupViewModel : ObservableObject
         };
 
         IsComplete = _setupService.IsSetupComplete;
+        CanRedownloadModels = _setupService.State.ModelsDownloaded;
     }
 
     [RelayCommand]
@@ -45,8 +47,9 @@ public partial class SetupViewModel : ObservableObject
 
         try
         {
-            await Task.Run(() => _setupService.RunFullSetupAsync());
+            await _setupService.RunFullSetupAsync();
             IsComplete = true;
+            CanRedownloadModels = true;
             StatusText = "Setup complete! You can now generate speech.";
         }
         catch (Exception ex)
@@ -54,6 +57,31 @@ public partial class SetupViewModel : ObservableObject
             HasError = true;
             ErrorText = ex.Message;
             StatusText = "Setup failed. See error below.";
+        }
+        finally
+        {
+            IsRunning = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RedownloadModelsAsync()
+    {
+        IsRunning = true;
+        HasError = false;
+        ErrorText = "";
+        LogText = "";
+
+        try
+        {
+            await _setupService.DownloadModelsAsync(force: true);
+            StatusText = "Models re-downloaded successfully!";
+        }
+        catch (Exception ex)
+        {
+            HasError = true;
+            ErrorText = ex.Message;
+            StatusText = "Model download failed. See error below.";
         }
         finally
         {

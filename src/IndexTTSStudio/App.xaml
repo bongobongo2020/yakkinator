@@ -27,6 +27,46 @@
             <SolidColorBrush x:Key="RetroBorder" Color="#7B3FE4" />
             <SolidColorBrush x:Key="RetroCyan"   Color="#00E5FF" />
             <SolidColorBrush x:Key="RetroMuted"  Color="#7B6A9E" />
+            <SolidColorBrush x:Key="RetroText"   Color="#FFFFFF" />
+
+            <!-- ===== NAVIGATION VIEW STYLE ===== -->
+            <!-- Ensure text is readable on dark background -->
+            <Style x:Key="NavigationViewStyle" TargetType="{x:Type ui:NavigationView}"
+                   BasedOn="{StaticResource {x:Type ui:NavigationView}}">
+                <Setter Property="Foreground" Value="{StaticResource RetroText}" />
+            </Style>
+
+            <Style TargetType="{x:Type ui:NavigationViewItem}" BasedOn="{StaticResource {x:Type ui:NavigationViewItem}}">
+                <Setter Property="Foreground" Value="{StaticResource RetroText}" />
+            </Style>
+
+            <!-- ===== GLOBAL TEXT FOREGROUND ===== -->
+            <!-- Ensure all text controls use light color on dark backgrounds -->
+            <Style TargetType="{x:Type TextBlock}">
+                <Setter Property="Foreground" Value="{StaticResource RetroText}" />
+                <Style.Resources>
+                    <Style TargetType="{x:Type Run}">
+                        <Setter Property="Foreground" Value="{StaticResource RetroText}" />
+                    </Style>
+                </Style.Resources>
+            </Style>
+
+            <Style TargetType="{x:Type TextBox}" BasedOn="{StaticResource {x:Type TextBox}}">
+                <Setter Property="Foreground" Value="{StaticResource RetroText}" />
+                <Setter Property="Background" Value="{StaticResource RetroCard}" />
+            </Style>
+
+            <Style TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
+                <Setter Property="Foreground" Value="{StaticResource RetroText}" />
+            </Style>
+
+            <Style TargetType="{x:Type RadioButton}" BasedOn="{StaticResource {x:Type RadioButton}}">
+                <Setter Property="Foreground" Value="{StaticResource RetroText}" />
+            </Style>
+
+            <Style TargetType="{x:Type Label}" BasedOn="{StaticResource {x:Type Label}}">
+                <Setter Property="Foreground" Value="{StaticResource RetroText}" />
+            </Style>
 
             <!-- ===== SECTION LABEL STYLE ===== -->
             <Style x:Key="RetroSectionLabel" TargetType="TextBlock">

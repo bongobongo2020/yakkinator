@@ -1,14 +1,12 @@
 using IndexTTSStudio.ViewModels;
-using Microsoft.Extensions.DependencyInjection;
-using Wpf.Ui.Controls;
 
 namespace IndexTTSStudio.Views.Pages;
 
 public partial class VoiceLibraryPage : System.Windows.Controls.Page
 {
-    public VoiceLibraryPage()
+    public VoiceLibraryPage(VoiceLibraryViewModel viewModel)
     {
-        DataContext = App.Services.GetRequiredService<VoiceLibraryViewModel>();
+        DataContext = viewModel;
         InitializeComponent();
     }
 }
