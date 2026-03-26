@@ -60,13 +60,13 @@
                          BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <RadioButton Content="None" IsChecked="True" GroupName="EmotionMode" Margin="0,0,8,0"
+                            <RadioButton x:Name="RadioNone" Content="None" IsChecked="True" GroupName="EmotionMode" Margin="0,0,8,0"
                                          Tag="none" Checked="EmotionModeChanged" />
-                            <RadioButton Content="Audio" GroupName="EmotionMode" Margin="0,0,8,0"
+                            <RadioButton x:Name="RadioAudio" Content="Audio" GroupName="EmotionMode" Margin="0,0,8,0"
                                          Tag="audio" Checked="EmotionModeChanged" />
-                            <RadioButton Content="Sliders" GroupName="EmotionMode" Margin="0,0,8,0"
+                            <RadioButton x:Name="RadioVector" Content="Sliders" GroupName="EmotionMode" Margin="0,0,8,0"
                                          Tag="vector" Checked="EmotionModeChanged" />
-                            <RadioButton Content="From Text" GroupName="EmotionMode"
+                            <RadioButton x:Name="RadioText" Content="From Text" GroupName="EmotionMode"
                                          Tag="text" Checked="EmotionModeChanged" />
                         </StackPanel>
 
@@ -189,6 +189,15 @@
                         <TextBlock Text="Backend ready" FontSize="11" Foreground="#69FF47" VerticalAlignment="Center" />
                     </StackPanel>
                 </StackPanel>
+
+                <!-- Generation progress bar -->
+                <ProgressBar Value="{Binding GenerationProgress}"
+                             Maximum="100"
+                             Height="3"
+                             Margin="0,5,0,0"
+                             Foreground="#69FF47"
+                             BorderThickness="0"
+                             Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisConverter}}" />
 
                 <!-- Error display -->
                 <ui:InfoBar Title="Generation Error"

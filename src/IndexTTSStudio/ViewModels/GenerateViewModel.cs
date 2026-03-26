@@ -48,6 +48,7 @@ public partial class GenerateViewModel : ObservableObject
     [ObservableProperty] private string? _lastOutputPath;
     [ObservableProperty] private bool _hasError;
     [ObservableProperty] private string _errorMessage = "";
+    [ObservableProperty] private double _generationProgress;
 
     // Voice library
     [ObservableProperty] private List<VoiceProfile> _savedVoices = [];
@@ -109,6 +110,17 @@ public partial class GenerateViewModel : ObservableObject
         if (profile == null) return;
         VoiceFilePath = profile.FilePath;
         VoiceFileName = profile.Name;
+        EmotionMode = profile.EmotionMode;
+        EmotionAlpha = profile.EmotionAlpha;
+        var v = profile.EmotionVector;
+        Joy        = v.Length > 0 ? v[0] : 0f;
+        Anger      = v.Length > 1 ? v[1] : 0f;
+        Sadness    = v.Length > 2 ? v[2] : 0f;
+        Fear       = v.Length > 3 ? v[3] : 0f;
+        Disgust    = v.Length > 4 ? v[4] : 0f;
+        Melancholy = v.Length > 5 ? v[5] : 0f;
+        Surprise   = v.Length > 6 ? v[6] : 0f;
+        Calm       = v.Length > 7 ? v[7] : 0f;
     }
 
     [RelayCommand]
@@ -127,7 +139,11 @@ public partial class GenerateViewModel : ObservableObject
 
         IsGenerating = true;
         HasError = false;
+        GenerationProgress = 0;
         StatusText = "Generating speech...";
+
+        using var progressCts = new CancellationTokenSource();
+        var progressTask = AnimateProgressAsync(progressCts.Token);
 
         try
         {
@@ -147,11 +163,17 @@ public partial class GenerateViewModel : ObservableObject
 
             var result = await _apiClient.GenerateAsync(request);
 
+            progressCts.Cancel();
+            await progressTask;
+
             if (result.Success)
             {
                 LastOutputPath = result.AudioFilePath;
                 StatusText = $"Generation complete! ({result.JobId})";
-                _voiceLibrary.LastUsedVoicePath = VoiceFilePath;
+                var voiceName = System.IO.Path.GetFileNameWithoutExtension(VoiceFilePath);
+                _voiceLibrary.SaveVoice(voiceName, VoiceFilePath, EmotionMode, EmotionAlpha,
+                    [Joy, Anger, Sadness, Fear, Disgust, Melancholy, Surprise, Calm]);
+                RefreshVoices();
             }
             else
             {
@@ -160,6 +182,8 @@ public partial class GenerateViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            progressCts.Cancel();
+            await progressTask;
             ShowError(ex.Message);
         }
         finally
@@ -168,6 +192,20 @@ public partial class GenerateViewModel : ObservableObject
             if (!HasError)
                 StatusText = "Backend ready";
         }
+    }
+
+    private async Task AnimateProgressAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(150, ct);
+                App.Current.Dispatcher.Invoke(() =>
+                    GenerationProgress += (90.0 - GenerationProgress) * 0.06);
+            }
+        }
+        catch (OperationCanceledException) { }
     }
 
     [RelayCommand]
