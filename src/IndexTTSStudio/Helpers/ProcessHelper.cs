@@ -45,7 +45,16 @@ public static class ProcessHelper
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        await process.WaitForExitAsync(ct);
+        try
+        {
+            await process.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Don't leave a download/install running in the background after cancel
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw;
+        }
         return (process.ExitCode, output.ToString(), error.ToString());
     }
 
@@ -55,14 +64,35 @@ public static class ProcessHelper
         var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
         var extensions = new[] { "", ".exe", ".cmd", ".bat" };
 
-        foreach (var dir in pathEnv.Split(Path.PathSeparator))
+        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             foreach (var ext in extensions)
             {
-                var fullPath = Path.Combine(dir, name + ext);
+                var fullPath = Path.Combine(dir.Trim('"'), name + ext);
                 if (File.Exists(fullPath)) return fullPath;
             }
         }
         return null;
     }
+
+    /// <summary>
+    /// Locates uv, including its default install locations. A freshly installed uv
+    /// is not on this process's PATH until the app restarts.
+    /// </summary>
+    public static string? FindUv()
+    {
+        var found = FindExecutable("uv");
+        if (found != null) return found;
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string[] candidates =
+        [
+            Path.Combine(home, ".local", "bin", "uv.exe"),
+            Path.Combine(home, ".cargo", "bin", "uv.exe"),
+        ];
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>uv executable to launch: the resolved path when known, otherwise rely on PATH.</summary>
+    public static string Uv => FindUv() ?? "uv";
 }

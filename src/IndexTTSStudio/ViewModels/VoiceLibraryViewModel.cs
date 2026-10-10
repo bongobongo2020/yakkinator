@@ -20,6 +20,7 @@ public partial class VoiceLibraryViewModel : ObservableObject
         _audioPlayer = audioPlayer;
         _audioPlayer.OnPlaybackStopped += () =>
             App.Current.Dispatcher.Invoke(() => IsPlaying = false);
+        _voiceLibrary.VoicesChanged += Refresh;
         Refresh();
     }
 
@@ -32,26 +33,15 @@ public partial class VoiceLibraryViewModel : ObservableObject
     [RelayCommand]
     private void AddVoice()
     {
-        var path = _voiceLibrary.LastUsedVoicePath;
-        if (!string.IsNullOrWhiteSpace(path) && System.IO.File.Exists(path))
+        var dlg = new OpenFileDialog
         {
-            var name = System.IO.Path.GetFileNameWithoutExtension(path);
-            _voiceLibrary.SaveVoice(name, path);
-            Refresh();
-        }
-        else
+            Filter = "Audio Files|*.wav;*.mp3;*.flac",
+            Title = "Add Voice to Library"
+        };
+        if (dlg.ShowDialog() == true)
         {
-            var dlg = new OpenFileDialog
-            {
-                Filter = "Audio Files|*.wav;*.mp3;*.flac",
-                Title = "Add Voice to Library"
-            };
-            if (dlg.ShowDialog() == true)
-            {
-                var name = System.IO.Path.GetFileNameWithoutExtension(dlg.FileName);
-                _voiceLibrary.SaveVoice(name, dlg.FileName);
-                Refresh();
-            }
+            var name = System.IO.Path.GetFileNameWithoutExtension(dlg.FileName);
+            _voiceLibrary.SaveVoice(name, dlg.FileName);
         }
     }
 
@@ -59,15 +49,16 @@ public partial class VoiceLibraryViewModel : ObservableObject
     private void DeleteVoice(VoiceProfile? voice)
     {
         if (voice == null) return;
-        _voiceLibrary.DeleteVoice(voice.Name);
-        Refresh();
+        _audioPlayer.ReleaseFile(voice.FilePath);
+        _voiceLibrary.DeleteVoice(voice);
     }
 
     [RelayCommand]
     private void PreviewVoice(VoiceProfile? voice)
     {
         if (voice == null) return;
-        if (IsPlaying)
+        // Clicking the voice that's playing stops it; clicking another one switches to it
+        if (IsPlaying && _audioPlayer.CurrentFile == voice.FilePath)
         {
             _audioPlayer.Stop();
             IsPlaying = false;

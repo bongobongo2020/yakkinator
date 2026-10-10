@@ -9,9 +9,12 @@ public class SetupService
 {
     public event Action<string>? OnStatusChanged;
     public event Action<double>? OnProgressChanged;
+    /// <summary>Raised when setup or a model re-download finishes successfully.</summary>
+    public event Action? OnSetupCompleted;
 
     private SetupState _state = new();
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+    private static readonly string[] CriticalModelFiles = ["gpt.pth", "config.yaml", "wav2vec2bert_stats.pt"];
 
     public SetupState State => _state;
 
@@ -26,10 +29,16 @@ public class SetupService
 
     private void LoadState()
     {
-        if (File.Exists(PathHelper.SetupStateFile))
+        if (!File.Exists(PathHelper.SetupStateFile)) return;
+        try
         {
             var json = File.ReadAllText(PathHelper.SetupStateFile);
             _state = JsonSerializer.Deserialize<SetupState>(json) ?? new SetupState();
+        }
+        catch (Exception ex) when (ex is JsonException or IOException)
+        {
+            // A corrupt state file just means setup re-checks each step
+            _state = new SetupState();
         }
     }
 
@@ -49,7 +58,31 @@ public class SetupService
         OnProgressChanged?.Invoke(pct);
     }
 
+    private InvalidOperationException Fail(string message)
+    {
+        _state.ErrorMessage = message;
+        SaveState();
+        return new InvalidOperationException(message);
+    }
+
+    /// <summary>Drops warning/traceback noise from hf CLI stderr, leaving actual error lines.</summary>
+    private static string FilterDownloadErrors(string stderr) =>
+        string.Join("\n", stderr.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => !line.Contains("FutureWarning") &&
+                           !line.Contains("DeprecationWarning") &&
+                           !line.Contains("Xet Storage") &&
+                           !line.Contains("PyDevTerminal") &&
+                           !line.Contains("site-packages") &&
+                           !line.TrimStart().StartsWith("at ") &&
+                           !string.IsNullOrWhiteSpace(line)));
+
     public async Task DownloadModelsAsync(bool force = false, CancellationToken ct = default)
+    {
+        await DownloadModelsCoreAsync(force, ct);
+        OnSetupCompleted?.Invoke();
+    }
+
+    private async Task DownloadModelsCoreAsync(bool force, CancellationToken ct)
     {
         if (!force && _state.ModelsDownloaded)
         {
@@ -57,41 +90,33 @@ public class SetupService
             return;
         }
 
-        Status("Downloading IndexTTS-2 models from HuggingFace (2-4 GB)...");
+        var uv = ProcessHelper.Uv;
+        Status("Downloading IndexTTS-2 models from HuggingFace (this may take 10-30 minutes)...");
         Status("Ensuring huggingface-hub CLI with Xet support is installed...");
 
         // Ensure hf CLI with hf_xet is available (needed for Xet Storage files)
-        await ProcessHelper.RunAsync("uv", "tool install \"huggingface-hub[hf_xet]\" --force",
+        await ProcessHelper.RunAsync(uv, "tool install \"huggingface-hub[hf_xet]\" --force",
             workingDirectory: PathHelper.BackendDir, ct: ct,
             onOutput: s => Status($"CLI: {s}"));
 
         Status("Downloading models using hf CLI (supports Xet Storage)...");
-        var (exitCode, output, error) = await ProcessHelper.RunAsync(
-            "uv", "tool run hf download IndexTeam/IndexTTS-2 --local-dir checkpoints",
+        var (exitCode, _, error) = await ProcessHelper.RunAsync(
+            uv, "tool run hf download IndexTeam/IndexTTS-2 --local-dir checkpoints",
             workingDirectory: PathHelper.BackendDir, ct: ct,
             onOutput: s => Status($"Download: {s}"));
 
         if (exitCode != 0)
         {
-            var errorLines = error.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            var actualErrors = string.Join("\n", errorLines.Where(line =>
-                !line.Contains("FutureWarning") && !line.Contains("DeprecationWarning") &&
-                !line.Contains("Xet Storage") && !string.IsNullOrWhiteSpace(line)));
-
+            var actualErrors = FilterDownloadErrors(error);
             if (!string.IsNullOrEmpty(actualErrors))
-            {
-                _state.ErrorMessage = $"Download failed (exit {exitCode}):\n{actualErrors}";
-                SaveState();
-                throw new InvalidOperationException(_state.ErrorMessage);
-            }
+                throw Fail($"Download failed (exit {exitCode}):\n{actualErrors}");
         }
 
         // Verify critical files — if any are missing, try a targeted per-file download
         // using hf_hub_download inside the project venv (where hf_xet is installed).
         Status("Verifying downloaded files...");
-        var criticalFiles = new[] { "gpt.pth", "config.yaml", "wav2vec2bert_stats.pt" };
-        var missing = criticalFiles
-            .Where(f => !File.Exists(Path.Combine(PathHelper.BackendDir, "checkpoints", f)))
+        var missing = CriticalModelFiles
+            .Where(f => !File.Exists(Path.Combine(PathHelper.CheckpointsDir, f)))
             .ToList();
 
         if (missing.Count > 0)
@@ -99,7 +124,7 @@ public class SetupService
             Status($"Some files are missing ({string.Join(", ", missing)}), retrying with direct download...");
 
             // Install hf_xet into the project venv so hf_hub_download can use it
-            await ProcessHelper.RunAsync("uv", "pip install \"huggingface_hub[hf_xet]\"",
+            await ProcessHelper.RunAsync(uv, "pip install \"huggingface_hub[hf_xet]\"",
                 workingDirectory: PathHelper.BackendDir, ct: ct,
                 onOutput: s => Status($"  {s}"));
 
@@ -114,24 +139,25 @@ path = hf_hub_download(
     repo_id='IndexTeam/IndexTTS-2',
     filename='{file}',
     local_dir='checkpoints',
-    local_dir_use_symlinks=False,
 )
 print(f'Downloaded: {{path}}')
 ";
                 var scriptPath = Path.Combine(PathHelper.BackendDir, "_dl_file.py");
                 File.WriteAllText(scriptPath, script);
-                var (rc, _, _) = await ProcessHelper.RunAsync("uv", $"run python \"{scriptPath}\"",
-                    workingDirectory: PathHelper.BackendDir, ct: ct,
-                    onOutput: s => Status($"  {s}"));
-                if (File.Exists(scriptPath)) File.Delete(scriptPath);
-
-                if (!File.Exists(Path.Combine(PathHelper.BackendDir, "checkpoints", file)))
+                try
                 {
-                    _state.ErrorMessage = $"Failed to download {file} even with direct method. " +
-                                          "Check your internet connection and try again.";
-                    SaveState();
-                    throw new InvalidOperationException(_state.ErrorMessage);
+                    await ProcessHelper.RunAsync(uv, $"run python \"{scriptPath}\"",
+                        workingDirectory: PathHelper.BackendDir, ct: ct,
+                        onOutput: s => Status($"  {s}"));
                 }
+                finally
+                {
+                    if (File.Exists(scriptPath)) File.Delete(scriptPath);
+                }
+
+                if (!File.Exists(Path.Combine(PathHelper.CheckpointsDir, file)))
+                    throw Fail($"Failed to download {file} even with direct method. " +
+                               "Check your internet connection and try again.");
             }
         }
 
@@ -139,7 +165,7 @@ print(f'Downloaded: {{path}}')
         _state.LastSetupDate = DateTime.UtcNow;
         _state.ErrorMessage = null;
         SaveState();
-        Status("Model download complete! Restart the app to start the backend.");
+        Status("Model download complete!");
     }
 
     public async Task RunFullSetupAsync(CancellationToken ct = default)
@@ -149,13 +175,8 @@ print(f'Downloaded: {{path}}')
         // Step 1: Check Git
         Progress(0.05);
         Status("Checking for Git...");
-        var gitPath = ProcessHelper.FindExecutable("git");
-        if (gitPath == null)
-        {
-            _state.ErrorMessage = "Git is not installed. Please install Git from https://git-scm.com and restart.";
-            SaveState();
-            throw new InvalidOperationException(_state.ErrorMessage);
-        }
+        if (ProcessHelper.FindExecutable("git") == null)
+            throw Fail("Git is not installed. Please install Git from https://git-scm.com and restart.");
         _state.GitInstalled = true;
         SaveState();
 
@@ -169,8 +190,7 @@ print(f'Downloaded: {{path}}')
         // Step 3: Install/Check uv
         Progress(0.15);
         Status("Checking for uv package manager...");
-        var uvPath = ProcessHelper.FindExecutable("uv");
-        if (uvPath == null)
+        if (ProcessHelper.FindUv() == null)
         {
             Status("Installing uv package manager...");
             // Install uv via pip or standalone installer
@@ -182,21 +202,18 @@ print(f'Downloaded: {{path}}')
             }
             else
             {
-                // Try standalone installer
-                await ProcessHelper.RunAsync("powershell", "-Command \"irm https://astral.sh/uv/install.ps1 | iex\"",
+                // Standalone installer; it installs to %USERPROFILE%\.local\bin, which FindUv checks
+                await ProcessHelper.RunAsync("powershell",
+                    "-NoProfile -ExecutionPolicy ByPass -Command \"irm https://astral.sh/uv/install.ps1 | iex\"",
                     ct: ct, onOutput: s => Status($"Installing uv: {s}"));
             }
 
-            uvPath = ProcessHelper.FindExecutable("uv");
-            if (uvPath == null)
-            {
-                _state.ErrorMessage = "Failed to install uv. Please install it manually: pip install uv";
-                SaveState();
-                throw new InvalidOperationException(_state.ErrorMessage);
-            }
+            if (ProcessHelper.FindUv() == null)
+                throw Fail("Failed to install uv. Please install it manually: pip install uv");
         }
         _state.UvInstalled = true;
         SaveState();
+        var uv = ProcessHelper.Uv;
 
         // Step 4: Clone the IndexTTS repo
         Progress(0.20);
@@ -211,6 +228,10 @@ print(f'Downloaded: {{path}}')
                 Directory.Delete(PathHelper.BackendDir, true);
             }
 
+            // A fresh clone has no venv or checkpoints, whatever the saved state says
+            _state.DependenciesInstalled = false;
+            _state.ModelsDownloaded = false;
+
             // Skip LFS smudge: the repo's LFS budget is often exceeded for example WAV files.
             // Model weights are downloaded separately from HuggingFace.
             var (exitCode, _, error) = await ProcessHelper.RunAsync(
@@ -218,11 +239,7 @@ print(f'Downloaded: {{path}}')
                 ct: ct, onOutput: s => Status($"Cloning: {s}"));
 
             if (exitCode != 0)
-            {
-                _state.ErrorMessage = $"Failed to clone repository: {error}";
-                SaveState();
-                throw new InvalidOperationException(_state.ErrorMessage);
-            }
+                throw Fail($"Failed to clone repository: {error}");
 
             _state.RepoCloned = true;
             SaveState();
@@ -234,16 +251,12 @@ print(f'Downloaded: {{path}}')
         {
             Status("Installing Python dependencies (this will take several minutes)...");
             var (exitCode, _, error) = await ProcessHelper.RunAsync(
-                "uv", "sync --extra webui",
+                uv, "sync --extra webui",
                 workingDirectory: PathHelper.BackendDir, ct: ct,
                 onOutput: s => Status($"Dependencies: {s}"));
 
             if (exitCode != 0)
-            {
-                _state.ErrorMessage = $"Failed to install dependencies: {error}";
-                SaveState();
-                throw new InvalidOperationException(_state.ErrorMessage);
-            }
+                throw Fail($"Failed to install dependencies: {error}");
             _state.DependenciesInstalled = true;
             SaveState();
         }
@@ -251,107 +264,20 @@ print(f'Downloaded: {{path}}')
 
         // Step 6: Install FastAPI + Uvicorn into the uv environment
         Status("Installing API server dependencies...");
-        await ProcessHelper.RunAsync("uv", "pip install fastapi uvicorn python-multipart",
+        var (apiExit, _, apiError) = await ProcessHelper.RunAsync(uv, "pip install fastapi uvicorn python-multipart",
             workingDirectory: PathHelper.BackendDir, ct: ct);
+        if (apiExit != 0)
+            throw Fail($"Failed to install API server dependencies: {apiError}");
+        Progress(0.65);
 
-        // Step 7: Download models using the official IndexTTS method
-        if (!_state.ModelsDownloaded)
-        {
-            Status("Downloading IndexTTS-2 models (this may take 10-30 minutes)...");
+        // Step 7: Download models
+        await DownloadModelsCoreAsync(force: false, ct);
 
-            // Use the official download method recommended by IndexTTS team
-            Status("Installing huggingface-cli tool...");
-            await ProcessHelper.RunAsync("uv", "tool install \"huggingface-hub[hf_xet]\"",
-                workingDirectory: PathHelper.BackendDir, ct: ct);
-
-            Status("Downloading models using hf download (official method)...");
-            var (exitCode, output, error) = await ProcessHelper.RunAsync(
-                "uv", "tool run hf download IndexTeam/IndexTTS-2 --local-dir checkpoints",
-                workingDirectory: PathHelper.BackendDir, ct: ct,
-                onOutput: s => Status($"Download: {s}"));
-
-            // Filter out warnings from error message
-            var errorLines = error.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            var actualErrors = string.Join("\n",
-                errorLines
-                    .Where(line => !line.Contains("FutureWarning") &&
-                                  !line.Contains("DeprecationWarning") &&
-                                  !line.Contains("Xet Storage") &&
-                                  !line.Contains("PyDevTerminal") &&
-                                  !line.Contains("site-packages") &&
-                                  !line.TrimStart().StartsWith("at ") &&
-                                  !string.IsNullOrWhiteSpace(line)));
-
-            if (exitCode != 0 && !string.IsNullOrEmpty(actualErrors))
-            {
-                _state.ErrorMessage = $"Failed to download models (exit code: {exitCode}):\n{actualErrors}";
-                SaveState();
-                throw new InvalidOperationException(_state.ErrorMessage);
-            }
-
-            // Verify download succeeded
-            Status("Verifying downloaded files...");
-            var verificationScript = @"
-import os
-import sys
-
-critical_files = ['gpt.pth', 'config.yaml', 'wav2vec2bert_stats.pt']
-missing = []
-
-for f in critical_files:
-    path = os.path.join('checkpoints', f)
-    if not os.path.exists(path):
-        # Check subdirectories
-        found = False
-        for root, dirs, files in os.walk('checkpoints'):
-            if f in files:
-                print(f'Found {f} in subdirectory: {root}')
-                import shutil
-                shutil.copy(os.path.join(root, f), path)
-                found = True
-                break
-        if not found:
-            missing.append(f)
-
-if missing:
-    print(f'MODEL_DOWNLOAD_FAILED: Missing critical files: {missing}', file=sys.stderr)
-    print('Note: Some files may be downloaded automatically on first run.', file=sys.stderr)
-    sys.exit(1)
-
-# List all files
-print('Downloaded files:')
-for item in os.listdir('checkpoints'):
-    item_path = os.path.join('checkpoints', item)
-    if os.path.isfile(item_path):
-        size_mb = os.path.getsize(item_path) / (1024*1024)
-        print(f'  {item} ({size_mb:.1f} MB)')
-
-print('MODEL_DOWNLOAD_SUCCESS')
-";
-
-            var scriptPath = Path.Combine(PathHelper.BackendDir, "_verify_download.py");
-            File.WriteAllText(scriptPath, verificationScript);
-
-            var (verifyExitCode, verifyOutput, verifyError) = await ProcessHelper.RunAsync(
-                "uv", $"run python \"{scriptPath}\"",
-                workingDirectory: PathHelper.BackendDir, ct: ct);
-
-            if (File.Exists(scriptPath)) File.Delete(scriptPath);
-
-            if (verifyExitCode != 0 || !verifyOutput.Contains("MODEL_DOWNLOAD_SUCCESS"))
-            {
-                _state.ErrorMessage = $"Model verification failed:\n{verifyError}\n\nOutput:\n{verifyOutput}";
-                SaveState();
-                throw new InvalidOperationException(_state.ErrorMessage);
-            }
-
-            _state.ModelsDownloaded = true;
-            SaveState();
-        }
         Progress(1.0);
         _state.LastSetupDate = DateTime.UtcNow;
         _state.ErrorMessage = null;
         SaveState();
         Status("Setup complete! Ready to generate speech.");
+        OnSetupCompleted?.Invoke();
     }
 }

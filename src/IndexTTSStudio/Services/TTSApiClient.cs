@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -8,6 +9,9 @@ namespace IndexTTSStudio.Services;
 
 public class TTSApiClient : IDisposable
 {
+    private static readonly string[] EmotionFieldNames =
+        ["emo_joy", "emo_anger", "emo_sadness", "emo_fear", "emo_disgust", "emo_melancholy", "emo_surprise", "emo_calm"];
+
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private readonly SettingsService _settingsService;
@@ -15,7 +19,8 @@ public class TTSApiClient : IDisposable
     public TTSApiClient(int port, SettingsService settingsService)
     {
         _baseUrl = $"http://127.0.0.1:{port}";
-        _http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        // Long texts on slower GPUs (or CPU) can take well over 10 minutes
+        _http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
         _settingsService = settingsService;
     }
 
@@ -23,57 +28,57 @@ public class TTSApiClient : IDisposable
     {
         try
         {
-            var resp = await _http.GetAsync($"{_baseUrl}/api/health");
+            using var resp = await _http.GetAsync($"{_baseUrl}/api/health");
             return resp.IsSuccessStatusCode;
         }
         catch { return false; }
+    }
+
+    // The server parses numbers with Python float(); "0,6" from a comma-decimal locale would be rejected.
+    private static StringContent Num(float value) => new(value.ToString(CultureInfo.InvariantCulture));
+    private static StringContent Num(int value) => new(value.ToString(CultureInfo.InvariantCulture));
+
+    private static async Task AddAudioAsync(MultipartFormDataContent form, string name, string path, CancellationToken ct)
+    {
+        var content = new ByteArrayContent(await File.ReadAllBytesAsync(path, ct));
+        content.Headers.ContentType = new MediaTypeHeaderValue(
+            Path.GetExtension(path).ToLowerInvariant() switch
+            {
+                ".mp3" => "audio/mpeg",
+                ".flac" => "audio/flac",
+                _ => "audio/wav",
+            });
+        form.Add(content, name, Path.GetFileName(path));
     }
 
     public async Task<TTSResponse> GenerateAsync(TTSRequest request, CancellationToken ct = default)
     {
         using var form = new MultipartFormDataContent();
 
-        // Voice file
-        var voiceBytes = await File.ReadAllBytesAsync(request.VoiceFilePath, ct);
-        var voiceContent = new ByteArrayContent(voiceBytes);
-        voiceContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-        form.Add(voiceContent, "voice", Path.GetFileName(request.VoiceFilePath));
-
-        // Text
+        await AddAudioAsync(form, "voice", request.VoiceFilePath, ct);
         form.Add(new StringContent(request.Text), "text");
 
         // Emotion mode
         form.Add(new StringContent(request.EmotionMode), "emotion_mode");
-        form.Add(new StringContent(request.EmotionAlpha.ToString()), "emotion_alpha");
+        form.Add(Num(request.EmotionAlpha), "emotion_alpha");
 
-        if (request.EmotionMode == "audio" && request.EmotionAudioPath != null)
-        {
-            var emoBytes = await File.ReadAllBytesAsync(request.EmotionAudioPath, ct);
-            var emoContent = new ByteArrayContent(emoBytes);
-            emoContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-            form.Add(emoContent, "emotion_audio", Path.GetFileName(request.EmotionAudioPath));
-        }
+        if (request.EmotionMode == "audio" && !string.IsNullOrWhiteSpace(request.EmotionAudioPath))
+            await AddAudioAsync(form, "emotion_audio", request.EmotionAudioPath, ct);
 
         if (request.EmotionMode == "vector")
         {
             var v = request.EmotionVector;
-            form.Add(new StringContent(v[0].ToString()), "emo_joy");
-            form.Add(new StringContent(v[1].ToString()), "emo_anger");
-            form.Add(new StringContent(v[2].ToString()), "emo_sadness");
-            form.Add(new StringContent(v[3].ToString()), "emo_fear");
-            form.Add(new StringContent(v[4].ToString()), "emo_disgust");
-            form.Add(new StringContent(v[5].ToString()), "emo_melancholy");
-            form.Add(new StringContent(v[6].ToString()), "emo_surprise");
-            form.Add(new StringContent(v[7].ToString()), "emo_calm");
+            for (var i = 0; i < EmotionFieldNames.Length; i++)
+                form.Add(Num(i < v.Length ? v[i] : 0f), EmotionFieldNames[i]);
         }
 
         // Generation params
-        form.Add(new StringContent(request.Temperature.ToString()), "temperature");
-        form.Add(new StringContent(request.TopP.ToString()), "top_p");
-        form.Add(new StringContent(request.TopK.ToString()), "top_k");
-        form.Add(new StringContent(request.MaxTokens.ToString()), "max_tokens");
+        form.Add(Num(request.Temperature), "temperature");
+        form.Add(Num(request.TopP), "top_p");
+        form.Add(Num(request.TopK), "top_k");
+        form.Add(Num(request.MaxTokens), "max_tokens");
 
-        var response = await _http.PostAsync($"{_baseUrl}/api/tts", form, ct);
+        using var response = await _http.PostAsync($"{_baseUrl}/api/tts", form, ct);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -82,10 +87,11 @@ public class TTSApiClient : IDisposable
         }
 
         // Save the returned WAV file
-        var jobId = response.Headers.Contains("X-Job-Id")
-            ? response.Headers.GetValues("X-Job-Id").First()
+        var jobId = response.Headers.TryGetValues("X-Job-Id", out var ids)
+            ? ids.First()
             : Guid.NewGuid().ToString()[..8];
 
+        PathHelper.EnsureDirectories();
         var outputPath = Path.Combine(PathHelper.OutputsDir, $"{jobId}.wav");
         var audioData = await response.Content.ReadAsByteArrayAsync(ct);
         await File.WriteAllBytesAsync(outputPath, audioData, ct);

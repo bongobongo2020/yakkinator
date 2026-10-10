@@ -16,8 +16,15 @@ public class SettingsService
     {
         if (File.Exists(PathHelper.SettingsFile))
         {
-            var json = File.ReadAllText(PathHelper.SettingsFile);
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            try
+            {
+                var json = File.ReadAllText(PathHelper.SettingsFile);
+                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            }
+            catch (Exception ex) when (ex is JsonException or IOException)
+            {
+                // Corrupt settings would otherwise prevent the app from starting at all
+            }
         }
         return new AppSettings();
     }

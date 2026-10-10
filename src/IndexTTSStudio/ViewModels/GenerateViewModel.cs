@@ -53,12 +53,19 @@ public partial class GenerateViewModel : ObservableObject
     // Voice library
     [ObservableProperty] private List<VoiceProfile> _savedVoices = [];
 
-    public GenerateViewModel(TTSApiClient apiClient, AudioPlayerService audioPlayer, VoiceLibraryService voiceLibrary, MainWindowViewModel mainVm)
+    public GenerateViewModel(TTSApiClient apiClient, AudioPlayerService audioPlayer, VoiceLibraryService voiceLibrary,
+        MainWindowViewModel mainVm, SettingsService settingsService)
     {
         _apiClient = apiClient;
         _audioPlayer = audioPlayer;
         _voiceLibrary = voiceLibrary;
         _mainVm = mainVm;
+
+        var settings = settingsService.Settings;
+        _temperature = settings.DefaultTemperature;
+        _topP = settings.DefaultTopP;
+        _topK = settings.DefaultTopK;
+
         _mainVm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(MainWindowViewModel.IsBackendRunning))
@@ -72,6 +79,7 @@ public partial class GenerateViewModel : ObservableObject
         };
         _audioPlayer.OnPlaybackStopped += () =>
             App.Current.Dispatcher.Invoke(() => IsPlaying = false);
+        _voiceLibrary.VoicesChanged += RefreshVoices;
         RefreshVoices();
     }
 
@@ -136,6 +144,11 @@ public partial class GenerateViewModel : ObservableObject
             StatusText = "Please select a reference voice file.";
             return;
         }
+        if (EmotionMode == "audio" && (string.IsNullOrWhiteSpace(EmotionAudioPath) || !System.IO.File.Exists(EmotionAudioPath)))
+        {
+            StatusText = "Please select an emotion reference audio file.";
+            return;
+        }
 
         IsGenerating = true;
         HasError = false;
@@ -168,12 +181,13 @@ public partial class GenerateViewModel : ObservableObject
 
             if (result.Success)
             {
+                GenerationProgress = 100;
                 LastOutputPath = result.AudioFilePath;
                 StatusText = $"Generation complete! ({result.JobId})";
-                var voiceName = System.IO.Path.GetFileNameWithoutExtension(VoiceFilePath);
-                _voiceLibrary.SaveVoice(voiceName, VoiceFilePath, EmotionMode, EmotionAlpha,
-                    [Joy, Anger, Sadness, Fear, Disgust, Melancholy, Surprise, Calm]);
-                RefreshVoices();
+                // Remember the voice and its emotion settings; a failure here must not
+                // turn a successful generation into an error.
+                try { SaveCurrentVoice(); }
+                catch (Exception ex) { LogError($"Auto-saving voice failed: {ex.Message}"); }
             }
             else
             {
@@ -189,8 +203,6 @@ public partial class GenerateViewModel : ObservableObject
         finally
         {
             IsGenerating = false;
-            if (!HasError)
-                StatusText = "Backend ready";
         }
     }
 
@@ -200,9 +212,9 @@ public partial class GenerateViewModel : ObservableObject
         {
             while (!ct.IsCancellationRequested)
             {
+                // Continuation resumes on the UI thread, so no dispatcher hop is needed
                 await Task.Delay(150, ct);
-                App.Current.Dispatcher.Invoke(() =>
-                    GenerationProgress += (90.0 - GenerationProgress) * 0.06);
+                GenerationProgress += (90.0 - GenerationProgress) * 0.06;
             }
         }
         catch (OperationCanceledException) { }
@@ -220,18 +232,31 @@ public partial class GenerateViewModel : ObservableObject
         }
         else
         {
-            _audioPlayer.Play(LastOutputPath);
-            IsPlaying = true;
+            try
+            {
+                _audioPlayer.Play(LastOutputPath);
+                IsPlaying = true;
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Playback failed: {ex.Message}";
+            }
         }
     }
 
     [RelayCommand]
     private void SaveVoice()
     {
-        if (string.IsNullOrWhiteSpace(VoiceFilePath)) return;
-        var name = System.IO.Path.GetFileNameWithoutExtension(VoiceFilePath);
-        _voiceLibrary.SaveVoice(name, VoiceFilePath);
-        RefreshVoices();
+        if (string.IsNullOrWhiteSpace(VoiceFilePath) || !File.Exists(VoiceFilePath)) return;
+        SaveCurrentVoice();
+        StatusText = $"Saved \"{VoiceFileName}\" to the voice library.";
+    }
+
+    private void SaveCurrentVoice()
+    {
+        var name = Path.GetFileNameWithoutExtension(VoiceFilePath);
+        VoiceFilePath = _voiceLibrary.SaveVoice(name, VoiceFilePath, EmotionMode, EmotionAlpha,
+            [Joy, Anger, Sadness, Fear, Disgust, Melancholy, Surprise, Calm]);
     }
 
     private void ShowError(string message)
@@ -239,7 +264,11 @@ public partial class GenerateViewModel : ObservableObject
         ErrorMessage = message;
         HasError = true;
         StatusText = "Generation failed";
+        LogError(message);
+    }
 
+    private static void LogError(string message)
+    {
         try
         {
             PathHelper.EnsureDirectories();

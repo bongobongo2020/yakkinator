@@ -4,23 +4,24 @@ FastAPI wrapper around IndexTTS-2 inference engine.
 Launched as a subprocess by the .NET application.
 """
 import sys
-import io
 # Force UTF-8 encoding for stdout/stderr to prevent charmap errors on Windows
-# when the IndexTTS tokenizer emits SentencePiece markers (e.g. \u2581 ▁).
-if hasattr(sys.stdout, 'buffer'):
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-if hasattr(sys.stderr, 'buffer'):
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+# when the IndexTTS tokenizer emits SentencePiece markers (e.g. ▁ ▁).
+# Line buffering ensures the .NET host sees log lines as they happen when piped.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, 'reconfigure'):
+        _stream.reconfigure(encoding='utf-8', errors='replace', line_buffering=True)
 import os
 import uuid
-import time
+import hashlib
+import asyncio
 import argparse
+import threading
 from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 import uvicorn
 
 # Global TTS engine reference
@@ -74,20 +75,54 @@ async def lifespan(app: FastAPI):
     tts_engine = None
 
 
+# No CORS middleware: the only client is the local .NET app, and a wildcard CORS
+# policy would let any web page the user visits drive this server.
 app = FastAPI(title="IndexTTS Studio API", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Ensure output directories exist
 UPLOAD_DIR = Path("./uploads")
 OUTPUT_DIR = Path("./outputs")
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+AUDIO_SUFFIXES = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
+MAX_CACHED_UPLOADS = 32
+
+# The model holds GPU state and is not thread-safe; serialize inference.
+_infer_lock = threading.Lock()
+
+
+def _store_upload(upload: UploadFile, prefix: str) -> Path:
+    """Persist an uploaded audio file under a content-hash name.
+
+    IndexTTS caches speaker/emotion conditioning keyed by the prompt *path*, so a
+    stable name per unique file lets repeated generations with the same voice skip
+    re-extracting embeddings.
+    """
+    data = upload.file.read()
+    suffix = Path(upload.filename or "").suffix.lower()
+    if suffix not in AUDIO_SUFFIXES:
+        suffix = ".wav"
+    digest = hashlib.sha1(data).hexdigest()[:16]
+    path = UPLOAD_DIR / f"{prefix}_{digest}{suffix}"
+    if path.exists():
+        os.utime(path)  # mark as recently used for pruning
+    else:
+        path.write_bytes(data)
+    return path
+
+
+def _prune_uploads():
+    files = sorted(UPLOAD_DIR.glob("*"), key=lambda f: f.stat().st_mtime, reverse=True)
+    for f in files[MAX_CACHED_UPLOADS:]:
+        _unlink_quietly(f)
+
+
+def _unlink_quietly(path: Path):
+    try:
+        path.unlink()
+    except OSError:
+        pass
 
 
 @app.get("/api/health")
@@ -100,8 +135,8 @@ async def health():
 
 
 @app.post("/api/tts")
-async def generate_speech(
-    voice: UploadFile = File(..., description="Reference voice WAV file"),
+def generate_speech(
+    voice: UploadFile = File(..., description="Reference voice audio file"),
     text: str = Form(..., description="Text to synthesize"),
     emotion_mode: str = Form("none", description="none|audio|vector|text"),
     emotion_audio: UploadFile = File(None, description="Emotion reference audio"),
@@ -119,39 +154,44 @@ async def generate_speech(
     top_k: int = Form(30),
     max_tokens: int = Form(120),
 ):
-    """Generate speech from text using a reference voice."""
+    """Generate speech from text using a reference voice.
+
+    Declared as a plain `def` so FastAPI runs it in a worker thread: inference is
+    blocking and would otherwise stall the event loop (and /api/health) while it runs.
+    """
     if tts_engine is None:
         raise HTTPException(status_code=503, detail="Model not loaded yet")
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text is empty")
 
-    # Save uploaded voice file
     job_id = str(uuid.uuid4())[:8]
-    voice_path = UPLOAD_DIR / f"{job_id}_voice.wav"
-    with open(voice_path, "wb") as f:
-        f.write(await voice.read())
-
+    voice_path = _store_upload(voice, "spk")
     output_path = OUTPUT_DIR / f"{job_id}_output.wav"
 
-    try:
+    generation_kwargs = {"temperature": temperature, "top_p": top_p, "top_k": top_k}
+
+    if model_version == "IndexTTS-1.5":
+        # v1.5 API: different argument names and no emotion control
+        kwargs = {
+            "audio_prompt": str(voice_path),
+            "text": text,
+            "output_path": str(output_path),
+            "verbose": True,
+            "max_text_tokens_per_sentence": max_tokens,
+            **generation_kwargs,
+        }
+    else:
         kwargs = {
             "spk_audio_prompt": str(voice_path),
             "text": text,
             "output_path": str(output_path),
             "verbose": True,
+            "max_text_tokens_per_segment": max_tokens,
+            **generation_kwargs,
         }
 
-        # Add generation params if the model supports them
-        try:
-            kwargs["temperature"] = temperature
-            kwargs["top_p"] = top_p
-            kwargs["top_k"] = top_k
-        except:
-            pass
-
         if emotion_mode == "audio" and emotion_audio is not None:
-            emo_path = UPLOAD_DIR / f"{job_id}_emo.wav"
-            with open(emo_path, "wb") as f:
-                f.write(await emotion_audio.read())
-            kwargs["emo_audio_prompt"] = str(emo_path)
+            kwargs["emo_audio_prompt"] = str(_store_upload(emotion_audio, "emo"))
             kwargs["emo_alpha"] = emotion_alpha
 
         elif emotion_mode == "vector":
@@ -165,26 +205,26 @@ async def generate_speech(
             kwargs["use_emo_text"] = True
             kwargs["emo_alpha"] = emotion_alpha
 
-        tts_engine.infer(**kwargs)
-
-        if not output_path.exists():
-            raise HTTPException(status_code=500, detail="Generation failed - no output file")
-
-        return FileResponse(
-            str(output_path),
-            media_type="audio/wav",
-            filename=f"indextts_{job_id}.wav",
-            headers={"X-Job-Id": job_id}
-        )
-
-    except HTTPException:
-        raise
+    try:
+        with _infer_lock:
+            tts_engine.infer(**kwargs)
     except Exception as e:
+        _unlink_quietly(output_path)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Cleanup voice upload (keep output for history)
-        if voice_path.exists():
-            voice_path.unlink()
+        _prune_uploads()
+
+    if not output_path.exists():
+        raise HTTPException(status_code=500, detail="Generation failed - no output file")
+
+    # The client keeps its own copy, so delete ours once sent instead of letting outputs pile up.
+    return FileResponse(
+        str(output_path),
+        media_type="audio/wav",
+        filename=f"indextts_{job_id}.wav",
+        headers={"X-Job-Id": job_id},
+        background=BackgroundTask(_unlink_quietly, output_path),
+    )
 
 
 @app.post("/api/voices/save")
@@ -196,7 +236,9 @@ async def save_voice(
     voices_dir = Path("./voices")
     voices_dir.mkdir(exist_ok=True)
 
-    safe_name = "".join(c for c in name if c.isalnum() or c in "._- ").strip()
+    safe_name = "".join(c for c in name if c.isalnum() or c in "_- ").strip()
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Invalid voice name")
     voice_path = voices_dir / f"{safe_name}.wav"
 
     with open(voice_path, "wb") as f:
@@ -214,11 +256,12 @@ async def list_voices():
 
     voices = []
     for f in voices_dir.glob("*.wav"):
+        st = f.stat()
         voices.append({
             "name": f.stem,
             "path": str(f),
-            "size": f.stat().st_size,
-            "modified": f.stat().st_mtime,
+            "size": st.st_size,
+            "modified": st.st_mtime,
         })
     return {"voices": sorted(voices, key=lambda v: v["modified"], reverse=True)}
 
@@ -228,11 +271,12 @@ async def list_outputs():
     """List generated output files."""
     outputs = []
     for f in OUTPUT_DIR.glob("*.wav"):
+        st = f.stat()
         outputs.append({
             "id": f.stem,
             "path": str(f),
-            "size": f.stat().st_size,
-            "created": f.stat().st_ctime,
+            "size": st.st_size,
+            "created": st.st_ctime,
         })
     return {"outputs": sorted(outputs, key=lambda o: o["created"], reverse=True)}
 
@@ -240,8 +284,9 @@ async def list_outputs():
 @app.get("/api/outputs/{filename}")
 async def get_output(filename: str):
     """Download a specific output file."""
-    path = OUTPUT_DIR / filename
-    if not path.exists():
+    path = (OUTPUT_DIR / filename).resolve()
+    # Reject traversal such as "..\\..\\secret" (backslashes are valid in a path segment)
+    if path.parent != OUTPUT_DIR.resolve() or not path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(str(path), media_type="audio/wav")
 
@@ -249,8 +294,7 @@ async def get_output(filename: str):
 @app.post("/api/shutdown")
 async def shutdown():
     """Graceful shutdown endpoint (called by .NET app on close)."""
-    import asyncio
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.call_later(0.5, lambda: os._exit(0))
     return {"status": "shutting_down"}
 
@@ -260,7 +304,8 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5299)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--model-dir", default="./checkpoints")
-    parser.add_argument("--fp16", action="store_true", default=True)
+    # --fp16 / --no-fp16 (previously store_true with default=True, so fp16 could never be turned off)
+    parser.add_argument("--fp16", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
     os.environ["INDEXTTS_MODEL_DIR"] = args.model_dir

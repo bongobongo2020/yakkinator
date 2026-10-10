@@ -24,6 +24,17 @@ public partial class MainWindow : FluentWindow
 
         InitializeComponent();
 
+        // BeginInvoke (not Invoke): the backend's output reader thread shouldn't block on
+        // the UI thread for every log line during verbose inference.
+        _backend.OnLog += msg => Dispatcher.BeginInvoke(() =>
+        {
+            _viewModel.BackendStatus = msg.Length > 50 ? msg[..50] + "..." : msg;
+        });
+        _setupService.OnSetupCompleted += () => Dispatcher.BeginInvoke(async () =>
+        {
+            if (!_backend.IsRunning) await StartBackendAsync();
+        });
+
         Loaded += OnLoaded;
     }
 
@@ -72,20 +83,24 @@ public partial class MainWindow : FluentWindow
         }
     }
 
+    private bool _startingBackend;
+
     private async Task StartBackendAsync()
     {
+        if (_startingBackend) return;
+        _startingBackend = true;
         try
         {
             _viewModel.BackendStatus = "Starting...";
-            _backend.OnLog += msg => Dispatcher.Invoke(() =>
-            {
-                _viewModel.BackendStatus = msg.Length > 50 ? msg[..50] + "..." : msg;
-            });
 
             await _backend.StartAsync();
 
-            _viewModel.BackendStatus = "Running";
-            _viewModel.IsBackendRunning = true;
+            // Queued after any pending log-line updates, so a stale log line can't overwrite it
+            await Dispatcher.InvokeAsync(() =>
+            {
+                _viewModel.BackendStatus = "Running";
+                _viewModel.IsBackendRunning = true;
+            }, System.Windows.Threading.DispatcherPriority.Background);
         }
         catch (Exception ex)
         {
@@ -119,6 +134,10 @@ public partial class MainWindow : FluentWindow
                 }
                 catch { }
             }
+        }
+        finally
+        {
+            _startingBackend = false;
         }
     }
 }

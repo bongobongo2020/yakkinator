@@ -63,6 +63,8 @@ public partial class HistoryViewModel : ObservableObject
     private void Delete(OutputItem? item)
     {
         if (item == null) return;
+        // NAudio keeps the file open while playing; release it before deleting
+        _audioPlayer.ReleaseFile(item.FilePath);
         if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
         Refresh();
     }

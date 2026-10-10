@@ -27,6 +27,25 @@ public partial class App : Application
             }
             catch { }
         };
+
+        // Errors thrown from commands/event handlers on the UI thread (e.g. an unreadable
+        // audio file, a file locked by another program) shouldn't take the whole app down.
+        DispatcherUnhandledException += (s, e) =>
+        {
+            try
+            {
+                Helpers.PathHelper.EnsureDirectories();
+                System.IO.File.AppendAllText(Helpers.PathHelper.LogFile,
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] UNHANDLED: {e.Exception}{Environment.NewLine}");
+            }
+            catch { }
+            System.Windows.MessageBox.Show(
+                e.Exception.Message,
+                "Error",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+            e.Handled = true;
+        };
     }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -39,26 +58,31 @@ public partial class App : Application
         services.AddSingleton<SettingsService>();
         services.AddSingleton<SetupService>();
         services.AddSingleton<PythonBackendService>(sp =>
-            new PythonBackendService(sp.GetRequiredService<SettingsService>().Settings.ApiPort));
+        {
+            var settings = sp.GetRequiredService<SettingsService>().Settings;
+            return new PythonBackendService(settings.ApiPort, settings.UseFp16);
+        });
         services.AddSingleton<TTSApiClient>(sp =>
             new TTSApiClient(sp.GetRequiredService<SettingsService>().Settings.ApiPort, sp.GetRequiredService<SettingsService>()));
         services.AddSingleton<AudioPlayerService>();
         services.AddSingleton<VoiceLibraryService>();
 
-        // ViewModels
+        // ViewModels — singletons: they subscribe to singleton service events, so transient
+        // instances leaked (and kept reacting) on every navigation. This also preserves
+        // page state such as the entered text when switching tabs.
         services.AddSingleton<MainWindowViewModel>();
-        services.AddTransient<SetupViewModel>();
-        services.AddTransient<GenerateViewModel>();
-        services.AddTransient<VoiceLibraryViewModel>();
-        services.AddTransient<HistoryViewModel>();
-        services.AddTransient<SettingsViewModel>();
+        services.AddSingleton<SetupViewModel>();
+        services.AddSingleton<GenerateViewModel>();
+        services.AddSingleton<VoiceLibraryViewModel>();
+        services.AddSingleton<HistoryViewModel>();
+        services.AddSingleton<SettingsViewModel>();
 
         // Pages (required by WPF-UI NavigationView service provider)
-        services.AddTransient<SetupPage>();
-        services.AddTransient<GeneratePage>();
-        services.AddTransient<VoiceLibraryPage>();
-        services.AddTransient<HistoryPage>();
-        services.AddTransient<SettingsPage>();
+        services.AddSingleton<SetupPage>();
+        services.AddSingleton<GeneratePage>();
+        services.AddSingleton<VoiceLibraryPage>();
+        services.AddSingleton<HistoryPage>();
+        services.AddSingleton<SettingsPage>();
 
         Services = services.BuildServiceProvider();
 
@@ -78,13 +102,12 @@ public partial class App : Application
         }
     }
 
-    protected override async void OnExit(ExitEventArgs e)
+    protected override void OnExit(ExitEventArgs e)
     {
-        // Shutdown backend
-        var backend = Services.GetService<PythonBackendService>();
-        if (backend != null) await backend.StopAsync();
-
-        Services.Dispose();
+        // Must stay synchronous: with `async void`, the process could exit at the first await,
+        // orphaning the Python backend (and its GPU memory). Disposing the container disposes
+        // PythonBackendService, which shuts the backend down.
+        Services?.Dispose();
         base.OnExit(e);
     }
 }
