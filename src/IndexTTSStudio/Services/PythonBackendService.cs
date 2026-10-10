@@ -59,12 +59,15 @@ public class PythonBackendService : IDisposable
         var targetScript = Path.Combine(PathHelper.BackendDir, "api_server.py");
         File.Copy(apiServerPath, targetScript, overwrite: true);
 
+        // Install uv if it has gone missing (or was never on PATH) instead of failing to launch
+        var uv = await ProcessHelper.EnsureUvAsync(s => OnLog?.Invoke(s), ct).ConfigureAwait(false);
+
         var fp16Flag = _useFp16 ? "--fp16" : "--no-fp16";
         _backendProcess = new Process
         {
             StartInfo = new ProcessStartInfo
             {
-                FileName = ProcessHelper.Uv,
+                FileName = uv,
                 Arguments = $"run python api_server.py --port {_port} --model-dir ./checkpoints {fp16Flag}",
                 WorkingDirectory = PathHelper.BackendDir,
                 RedirectStandardOutput = true,

@@ -190,30 +190,17 @@ print(f'Downloaded: {{path}}')
         // Step 3: Install/Check uv
         Progress(0.15);
         Status("Checking for uv package manager...");
-        if (ProcessHelper.FindUv() == null)
+        string uv;
+        try
         {
-            Status("Installing uv package manager...");
-            // Install uv via pip or standalone installer
-            var pipPath = ProcessHelper.FindExecutable("pip") ?? ProcessHelper.FindExecutable("pip3");
-            if (pipPath != null)
-            {
-                await ProcessHelper.RunAsync(pipPath, "install -U uv", ct: ct,
-                    onOutput: s => Status($"Installing uv: {s}"));
-            }
-            else
-            {
-                // Standalone installer; it installs to %USERPROFILE%\.local\bin, which FindUv checks
-                await ProcessHelper.RunAsync("powershell",
-                    "-NoProfile -ExecutionPolicy ByPass -Command \"irm https://astral.sh/uv/install.ps1 | iex\"",
-                    ct: ct, onOutput: s => Status($"Installing uv: {s}"));
-            }
-
-            if (ProcessHelper.FindUv() == null)
-                throw Fail("Failed to install uv. Please install it manually: pip install uv");
+            uv = await ProcessHelper.EnsureUvAsync(s => Status($"Installing uv: {s}"), ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw Fail(ex.Message);
         }
         _state.UvInstalled = true;
         SaveState();
-        var uv = ProcessHelper.Uv;
 
         // Step 4: Clone the IndexTTS repo
         Progress(0.20);
