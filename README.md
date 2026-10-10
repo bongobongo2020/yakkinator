@@ -12,7 +12,7 @@
 
 ## Download 💾
 
-**[Get TheYakkinator-v1.1.0-win-x64.zip](https://github.com/bongobongo2020/yakkinator/releases/download/v1.1.0/TheYakkinator-v1.1.0-win-x64.zip)**
+**[Get TheYakkinator-v1.1.1-win-x64.zip](https://github.com/bongobongo2020/yakkinator/releases/download/v1.1.1/TheYakkinator-v1.1.1-win-x64.zip)**
 
 ---
 
