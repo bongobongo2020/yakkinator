@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Speech bubble with a sound wave, in the desktop app's purple/cyan -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7B3FE4"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M34,36 h40 a6,6 0 0 1 6,6 v20 a6,6 0 0 1 -6,6 h-22 l-10,9 v-9 h-8 a6,6 0 0 1 -6,-6 v-20 a6,6 0 0 1 6,-6 z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M40,52 v0 M47,46 v12 M54,42 v20 M61,46 v12 M68,52 v0" />
+</vector>
