@@ -65,6 +65,37 @@
                 </StackPanel>
             </ui:Card>
 
+            <TextBlock Text="ECHO-TTS (OPTIONAL)" Style="{StaticResource RetroSectionLabel}" Margin="0,4,0,2" />
+            <ui:Card Margin="0,0,0,4" Padding="8,6,8,6"
+                     Background="{StaticResource RetroCard}"
+                     BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,0,0,5">
+                        <Run>A second engine you can pick on the Generate page: </Run>
+                        <Hyperlink NavigateUri="https://github.com/Cirius0310/echo-tts-cpp">Echo-TTS C++</Hyperlink>
+                        <Run>. Downloads a portable runtime (~1.7 GB, CUDA libraries included) and the Q8 model (~5 GB). Needs an NVIDIA GPU. Model weights are licensed CC-BY-NC-SA 4.0 (non-commercial).</Run>
+                    </TextBlock>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Install Echo-TTS"
+                                   Icon="{ui:SymbolIcon ArrowDownload24}"
+                                   Command="{Binding InstallEchoCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"
+                                   Visibility="{Binding IsEchoInstalled, Converter={StaticResource InverseBoolToVisConverter}}" />
+                        <ui:Badge Visibility="{Binding IsEchoInstalled, Converter={StaticResource BoolToVisConverter}}"
+                                  Appearance="Success" VerticalAlignment="Center" Margin="0,0,8,0">
+                            <TextBlock Text="Echo-TTS Installed" />
+                        </ui:Badge>
+                        <ui:Button Content="Reinstall Echo-TTS"
+                                   Icon="{ui:SymbolIcon ArrowDownload24}"
+                                   Command="{Binding InstallEchoCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"
+                                   Visibility="{Binding IsEchoInstalled, Converter={StaticResource BoolToVisConverter}}" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
             <ui:InfoBar Title="Setup Error"
                         Message="{Binding ErrorText}"
                         IsOpen="{Binding HasError}"

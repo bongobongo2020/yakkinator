@@ -16,6 +16,17 @@ public static class PathHelper
     public static string SetupStateFile => Path.Combine(AppDataDir, "setup-state.json");
     public static string LogFile => Path.Combine(AppDataDir, "app.log");
 
+    // Echo-TTS (C++ engine): portable runtime in bin/, GGUF + ONNX weights in models/
+    public static string EchoDir => Path.Combine(AppDataDir, "echo-tts");
+    public static string EchoBinDir => Path.Combine(EchoDir, "bin");
+    public static string EchoExe => Path.Combine(EchoBinDir, "echo-tts.exe");
+    public static string EchoModelsDir => Path.Combine(EchoDir, "models");
+    public static string EchoModelFile => Path.Combine(EchoModelsDir, "echo-dit-q8.gguf");
+    public static string EchoDacEncoder => Path.Combine(EchoModelsDir, "onnx", "dac_encoder.onnx");
+    public static string EchoDacDecoder => Path.Combine(EchoModelsDir, "onnx", "dac_decoder.onnx");
+    /// <summary>WAV copies of MP3/FLAC voices; Echo-TTS only reads WAV.</summary>
+    public static string EchoVoiceCacheDir => Path.Combine(EchoDir, "voice-cache");
+
     /// <summary>
     /// Path to the api_server.py bundled with the .NET app.
     /// At dev time, this is in the repo's python/ folder.

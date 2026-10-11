@@ -8,6 +8,8 @@ public class SetupState
     public bool RepoCloned { get; set; }
     public bool DependenciesInstalled { get; set; }
     public bool ModelsDownloaded { get; set; }
+    public bool EchoRuntimeInstalled { get; set; }
+    public bool EchoModelsDownloaded { get; set; }
     public string? ModelVersion { get; set; } = "IndexTTS-2";
     public DateTime? LastSetupDate { get; set; }
     public string? ErrorMessage { get; set; }

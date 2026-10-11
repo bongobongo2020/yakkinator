@@ -1,5 +1,6 @@
 using System.Windows;
 using IndexTTSStudio.Helpers;
+using IndexTTSStudio.Models;
 using IndexTTSStudio.Services;
 using IndexTTSStudio.ViewModels;
 using IndexTTSStudio.Views.Pages;
@@ -14,12 +15,16 @@ public partial class MainWindow : FluentWindow
     private readonly MainWindowViewModel _viewModel;
     private readonly PythonBackendService _backend;
     private readonly SetupService _setupService;
+    private readonly EchoBackendService _echo;
+    private CancellationTokenSource? _startCts;
 
     public MainWindow()
     {
         _viewModel = App.Services.GetRequiredService<MainWindowViewModel>();
         _backend = App.Services.GetRequiredService<PythonBackendService>();
         _setupService = App.Services.GetRequiredService<SetupService>();
+        _echo = App.Services.GetRequiredService<EchoBackendService>();
+        _viewModel.SelectedEngine = App.Services.GetRequiredService<SettingsService>().Settings.Engine;
         DataContext = _viewModel;
 
         InitializeComponent();
@@ -32,8 +37,14 @@ public partial class MainWindow : FluentWindow
         });
         _setupService.OnSetupCompleted += () => Dispatcher.BeginInvoke(async () =>
         {
-            if (!_backend.IsRunning) await StartBackendAsync();
+            if (_viewModel.SelectedEngine == TtsEngine.IndexTTS && !_backend.IsRunning)
+                await StartBackendAsync();
         });
+        _viewModel.PropertyChanged += async (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainWindowViewModel.SelectedEngine))
+                await ApplyEngineAsync(_viewModel.SelectedEngine);
+        };
 
         Loaded += OnLoaded;
     }
@@ -62,7 +73,15 @@ public partial class MainWindow : FluentWindow
             // Set up page navigation service
             NavigationView.SetServiceProvider(App.Services);
 
-            if (!_setupService.IsSetupComplete)
+            // Remote access for the Android app (no-op unless enabled in Settings)
+            await App.Services.GetRequiredService<RemoteServerService>().ApplySettingsAsync();
+
+            if (_viewModel.SelectedEngine == TtsEngine.EchoTTS)
+            {
+                // Echo-TTS loads lazily on the first generation (it needs the chosen voice)
+                NavigationView.Navigate(_setupService.IsEchoSetupComplete ? typeof(GeneratePage) : typeof(SetupPage));
+            }
+            else if (!_setupService.IsSetupComplete)
             {
                 NavigationView.Navigate(typeof(SetupPage));
             }
@@ -83,24 +102,61 @@ public partial class MainWindow : FluentWindow
         }
     }
 
+    /// <summary>Only one engine stays loaded, so switching frees the other one's GPU memory.</summary>
+    private async Task ApplyEngineAsync(TtsEngine engine)
+    {
+        try
+        {
+            if (engine == TtsEngine.EchoTTS)
+            {
+                _startCts?.Cancel();
+                await _backend.StopAsync();
+                _viewModel.IsBackendRunning = false;
+                _viewModel.BackendStatus = "Stopped";
+            }
+            else
+            {
+                await _echo.StopAsync();
+                if (_setupService.IsSetupComplete)
+                    await StartBackendAsync();
+                else
+                    _viewModel.BackendStatus = "IndexTTS-2 isn't set up yet. Run it from the Setup page.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _viewModel.BackendStatus = $"Switching engine failed: {ex.Message}";
+        }
+    }
+
     private bool _startingBackend;
 
     private async Task StartBackendAsync()
     {
         if (_startingBackend) return;
         _startingBackend = true;
+        _startCts = new CancellationTokenSource();
+        var ct = _startCts.Token;
+        var cancelled = false;
         try
         {
             _viewModel.BackendStatus = "Starting...";
 
-            await _backend.StartAsync();
+            await _backend.StartAsync(ct);
 
             // Queued after any pending log-line updates, so a stale log line can't overwrite it
             await Dispatcher.InvokeAsync(() =>
             {
+                if (ct.IsCancellationRequested) return; // switched to Echo-TTS meanwhile
                 _viewModel.BackendStatus = "Running";
                 _viewModel.IsBackendRunning = true;
             }, System.Windows.Threading.DispatcherPriority.Background);
+        }
+        catch (Exception) when (ct.IsCancellationRequested)
+        {
+            // Engine switched away while IndexTTS was loading
+            cancelled = true;
+            _viewModel.BackendStatus = "Stopped";
         }
         catch (Exception ex)
         {
@@ -138,6 +194,12 @@ public partial class MainWindow : FluentWindow
         finally
         {
             _startingBackend = false;
+            _startCts.Dispose();
+            _startCts = null;
         }
+
+        // Switched away and back again before the cancelled start finished unwinding
+        if (cancelled && _viewModel.SelectedEngine == TtsEngine.IndexTTS && !_backend.IsRunning)
+            await StartBackendAsync();
     }
 }

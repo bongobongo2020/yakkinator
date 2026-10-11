@@ -11,12 +11,32 @@ namespace IndexTTSStudio.ViewModels;
 public partial class GenerateViewModel : ObservableObject
 {
     private readonly TTSApiClient _apiClient;
+    private readonly EchoBackendService _echo;
     private readonly AudioPlayerService _audioPlayer;
     private readonly VoiceLibraryService _voiceLibrary;
     private readonly MainWindowViewModel _mainVm;
+    private readonly SettingsService _settingsService;
+    private readonly SetupService _setupService;
 
-    public bool IsBackendRunning => _mainVm.IsBackendRunning;
-    public string BackendStatus => _mainVm.BackendStatus;
+    public IReadOnlyList<TtsEngineOption> Engines { get; } =
+    [
+        new(TtsEngine.IndexTTS, "IndexTTS-2"),
+        new(TtsEngine.EchoTTS, "Echo-TTS"),
+    ];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIndexTts), nameof(IsEcho), nameof(IsEngineReady), nameof(BackendStatus), nameof(EngineReadyText))]
+    private TtsEngine _selectedEngine;
+
+    public bool IsIndexTts => SelectedEngine == TtsEngine.IndexTTS;
+    public bool IsEcho => SelectedEngine == TtsEngine.EchoTTS;
+
+    // Echo-TTS loads on the first generation (it needs the voice up front), so it's "ready" once installed
+    public bool IsEngineReady => IsEcho ? _setupService.IsEchoSetupComplete : _mainVm.IsBackendRunning;
+    public string EngineReadyText => IsEcho ? "Echo-TTS ready" : "Backend ready";
+    public string BackendStatus => IsEcho
+        ? "Echo-TTS isn't installed yet. Install it from the Setup page."
+        : _mainVm.BackendStatus;
 
     [ObservableProperty] private string _text = "";
     [ObservableProperty] private string _voiceFilePath = "";
@@ -41,6 +61,12 @@ public partial class GenerateViewModel : ObservableObject
     [ObservableProperty] private int _topK = 30;
     [ObservableProperty] private int _maxTokens = 120;
 
+    // Echo-TTS params (applied by relaunching its server, so changing them costs a model reload)
+    [ObservableProperty] private int _echoSteps = 40;
+    [ObservableProperty] private float _echoCfgText = 3.0f;
+    [ObservableProperty] private float _echoCfgSpeaker = 8.0f;
+    [ObservableProperty] private int _echoSeed;
+
     // State
     [ObservableProperty] private bool _isGenerating;
     [ObservableProperty] private bool _isPlaying;
@@ -53,13 +79,18 @@ public partial class GenerateViewModel : ObservableObject
     // Voice library
     [ObservableProperty] private List<VoiceProfile> _savedVoices = [];
 
-    public GenerateViewModel(TTSApiClient apiClient, AudioPlayerService audioPlayer, VoiceLibraryService voiceLibrary,
-        MainWindowViewModel mainVm, SettingsService settingsService)
+    public GenerateViewModel(TTSApiClient apiClient, EchoBackendService echo, AudioPlayerService audioPlayer,
+        VoiceLibraryService voiceLibrary, MainWindowViewModel mainVm, SettingsService settingsService,
+        SetupService setupService)
     {
         _apiClient = apiClient;
+        _echo = echo;
         _audioPlayer = audioPlayer;
         _voiceLibrary = voiceLibrary;
         _mainVm = mainVm;
+        _settingsService = settingsService;
+        _setupService = setupService;
+        _selectedEngine = mainVm.SelectedEngine;
 
         var settings = settingsService.Settings;
         _temperature = settings.DefaultTemperature;
@@ -70,17 +101,34 @@ public partial class GenerateViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(MainWindowViewModel.IsBackendRunning))
             {
-                OnPropertyChanged(nameof(IsBackendRunning));
-                if (_mainVm.IsBackendRunning)
+                OnPropertyChanged(nameof(IsEngineReady));
+                if (_mainVm.IsBackendRunning && IsIndexTts)
                     StatusText = "Backend ready";
             }
             else if (e.PropertyName == nameof(MainWindowViewModel.BackendStatus))
                 OnPropertyChanged(nameof(BackendStatus));
         };
+        _setupService.OnEchoSetupCompleted += () => App.Current.Dispatcher.BeginInvoke(() =>
+        {
+            OnPropertyChanged(nameof(IsEngineReady));
+            if (IsEcho) StatusText = "Echo-TTS ready";
+        });
         _audioPlayer.OnPlaybackStopped += () =>
             App.Current.Dispatcher.Invoke(() => IsPlaying = false);
         _voiceLibrary.VoicesChanged += RefreshVoices;
         RefreshVoices();
+    }
+
+    partial void OnSelectedEngineChanged(TtsEngine value)
+    {
+        HasError = false;
+        StatusText = value == TtsEngine.EchoTTS && _setupService.IsEchoSetupComplete
+            ? "Echo-TTS loads on the first generation."
+            : "Ready";
+        _mainVm.SelectedEngine = value;
+        _settingsService.Settings.Engine = value;
+        try { _settingsService.Save(); }
+        catch (Exception ex) { LogError($"Saving engine choice failed: {ex.Message}"); }
     }
 
     [RelayCommand]
@@ -144,7 +192,12 @@ public partial class GenerateViewModel : ObservableObject
             StatusText = "Please select a reference voice file.";
             return;
         }
-        if (EmotionMode == "audio" && (string.IsNullOrWhiteSpace(EmotionAudioPath) || !System.IO.File.Exists(EmotionAudioPath)))
+        if (IsEcho && !_setupService.IsEchoSetupComplete)
+        {
+            StatusText = "Install Echo-TTS from the Setup page first.";
+            return;
+        }
+        if (IsIndexTts && EmotionMode == "audio" && (string.IsNullOrWhiteSpace(EmotionAudioPath) || !System.IO.File.Exists(EmotionAudioPath)))
         {
             StatusText = "Please select an emotion reference audio file.";
             return;
@@ -160,21 +213,23 @@ public partial class GenerateViewModel : ObservableObject
 
         try
         {
-            var request = new TTSRequest
-            {
-                Text = Text,
-                VoiceFilePath = VoiceFilePath,
-                EmotionMode = EmotionMode,
-                EmotionAudioPath = EmotionMode == "audio" ? EmotionAudioPath : null,
-                EmotionAlpha = EmotionAlpha,
-                EmotionVector = [Joy, Anger, Sadness, Fear, Disgust, Melancholy, Surprise, Calm],
-                Temperature = Temperature,
-                TopP = TopP,
-                TopK = TopK,
-                MaxTokens = MaxTokens,
-            };
-
-            var result = await _apiClient.GenerateAsync(request);
+            var result = IsEcho
+                ? await _echo.GenerateAsync(Text, VoiceFilePath,
+                    new EchoSamplerSettings(EchoSteps, EchoCfgText, EchoCfgSpeaker, EchoSeed),
+                    status => App.Current.Dispatcher.BeginInvoke(() => StatusText = status))
+                : await _apiClient.GenerateAsync(new TTSRequest
+                {
+                    Text = Text,
+                    VoiceFilePath = VoiceFilePath,
+                    EmotionMode = EmotionMode,
+                    EmotionAudioPath = EmotionMode == "audio" ? EmotionAudioPath : null,
+                    EmotionAlpha = EmotionAlpha,
+                    EmotionVector = [Joy, Anger, Sadness, Fear, Disgust, Melancholy, Surprise, Calm],
+                    Temperature = Temperature,
+                    TopP = TopP,
+                    TopK = TopK,
+                    MaxTokens = MaxTokens,
+                });
 
             progressCts.Cancel();
             await progressTask;

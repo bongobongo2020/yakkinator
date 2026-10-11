@@ -11,11 +11,16 @@
     <Product>Yakkinator</Product>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Kestrel hosts the remote API the Android app talks to (no admin URL ACLs, unlike HttpListener) -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="WPF-UI" Version="3.*" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.*" />
     <PackageReference Include="NAudio" Version="2.*" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.*" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.*" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\python\api_server.py" Link="python\api_server.py">

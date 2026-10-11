@@ -64,8 +64,10 @@ public partial class App : Application
         });
         services.AddSingleton<TTSApiClient>(sp =>
             new TTSApiClient(sp.GetRequiredService<SettingsService>().Settings.ApiPort, sp.GetRequiredService<SettingsService>()));
+        services.AddSingleton<EchoBackendService>();
         services.AddSingleton<AudioPlayerService>();
         services.AddSingleton<VoiceLibraryService>();
+        services.AddSingleton<RemoteServerService>();
 
         // ViewModels — singletons: they subscribe to singleton service events, so transient
         // instances leaked (and kept reacting) on every navigation. This also preserves
@@ -106,7 +108,7 @@ public partial class App : Application
     {
         // Must stay synchronous: with `async void`, the process could exit at the first await,
         // orphaning the Python backend (and its GPU memory). Disposing the container disposes
-        // PythonBackendService, which shuts the backend down.
+        // PythonBackendService and EchoBackendService, which shut the backends down.
         Services?.Dispose();
         base.OnExit(e);
     }

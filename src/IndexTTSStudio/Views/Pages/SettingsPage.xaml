@@ -4,6 +4,7 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="Settings">
 
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="8,4,8,4" MaxWidth="520" HorizontalAlignment="Left">
         <TextBlock Text="Settings" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
 
@@ -57,9 +58,61 @@
             </StackPanel>
         </ui:Card>
 
+        <ui:Card Margin="0,0,0,6" Padding="8,5,8,5"
+                 Background="{StaticResource RetroCard}"
+                 BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+            <StackPanel>
+                <ui:ToggleSwitch Content="Remote Access (Android app)" IsChecked="{Binding RemoteEnabled}"
+                                 ToolTip="Let the Yakkinator Android app generate speech on this PC" />
+                <TextBlock Text="{Binding RemoteStatus}" Opacity="0.6" FontSize="10" Margin="0,2,0,6" />
+                <TextBlock TextWrapping="Wrap" Opacity="0.6" FontSize="10" Margin="0,0,0,6"
+                           Text="Reach this PC from your phone over Tailscale (recommended) or an HTTPS tunnel such as Cloudflare Tunnel. Don't port-forward it directly: traffic is plain HTTP." />
+
+                <TextBlock Text="Address the phone uses" FontSize="12" Margin="0,0,0,2" />
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox IsEditable="True" ItemsSource="{Binding RemoteAddresses}"
+                              Text="{Binding RemoteAddress, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="Tailscale IP (100.x.x.x), LAN IP, or a full tunnel URL like https://tts.example.com"
+                              Margin="0,0,4,0" />
+                    <ui:Button Grid.Column="1" Icon="{ui:SymbolIcon ArrowSync24}" Command="{Binding RefreshAddressesCommand}"
+                               ToolTip="Re-detect network addresses" />
+                </Grid>
+                <TextBlock Text="{Binding RemoteUrl}" Opacity="0.6" FontSize="10" Margin="0,0,0,6" />
+
+                <TextBlock Text="Port" FontSize="12" Margin="0,0,0,2" />
+                <ui:NumberBox Value="{Binding RemotePort}" Minimum="1024" Maximum="65535" SpinButtonPlacementMode="Inline" Margin="0,0,0,6" />
+
+                <TextBlock Text="Access token" FontSize="12" Margin="0,0,0,2" />
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Text="{Binding RemoteToken, Mode=OneWay}" IsReadOnly="True" PlaceholderText="Generated when enabled" Margin="0,0,4,0" />
+                    <ui:Button Grid.Column="1" Icon="{ui:SymbolIcon Copy24}" Command="{Binding CopyTokenCommand}" ToolTip="Copy token" Margin="0,0,4,0" />
+                    <ui:Button Grid.Column="2" Icon="{ui:SymbolIcon ArrowClockwise24}" Command="{Binding RegenerateTokenCommand}"
+                               ToolTip="Generate a new token (paired phones must pair again)" />
+                </Grid>
+
+                <StackPanel Visibility="{Binding PairingQr, Converter={StaticResource NullToVisConverter}}">
+                    <TextBlock Text="Scan with the Yakkinator app to pair" FontSize="12" Margin="0,0,0,4" />
+                    <Border Background="White" Padding="6" HorizontalAlignment="Left" CornerRadius="4">
+                        <Image Source="{Binding PairingQr}" Width="180" Height="180" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                    </Border>
+                    <ui:Button Content="Copy pairing link" Icon="{ui:SymbolIcon Link24}" Command="{Binding CopyPairingLinkCommand}" Margin="0,6,0,0" />
+                </StackPanel>
+            </StackPanel>
+        </ui:Card>
+
         <ui:Button Content="Save Settings" Appearance="Primary"
                    Icon="{ui:SymbolIcon Save24}"
                    Command="{Binding SaveCommand}"
                    Style="{StaticResource BounceButton}" />
     </StackPanel>
+    </ScrollViewer>
 </Page>

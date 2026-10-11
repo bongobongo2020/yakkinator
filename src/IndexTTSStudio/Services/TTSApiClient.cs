@@ -89,19 +89,10 @@ public class TTSApiClient : IDisposable
         // Save the returned WAV file
         var jobId = response.Headers.TryGetValues("X-Job-Id", out var ids)
             ? ids.First()
-            : Guid.NewGuid().ToString()[..8];
+            : OutputHelper.NewJobId();
 
-        PathHelper.EnsureDirectories();
-        var outputPath = Path.Combine(PathHelper.OutputsDir, $"{jobId}.wav");
         var audioData = await response.Content.ReadAsByteArrayAsync(ct);
-        await File.WriteAllBytesAsync(outputPath, audioData, ct);
-
-        var customDir = _settingsService.Settings.OutputDirectory;
-        if (!string.IsNullOrWhiteSpace(customDir) && Directory.Exists(customDir))
-        {
-            var copyPath = Path.Combine(customDir, $"{jobId}.wav");
-            await File.WriteAllBytesAsync(copyPath, audioData, ct);
-        }
+        var outputPath = await OutputHelper.SaveAsync(audioData, jobId, _settingsService.Settings.OutputDirectory, ct);
 
         return new TTSResponse
         {

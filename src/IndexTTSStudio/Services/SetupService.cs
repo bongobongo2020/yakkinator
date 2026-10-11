@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Text.Json;
 using IndexTTSStudio.Models;
 using IndexTTSStudio.Helpers;
@@ -75,6 +76,124 @@ public class SetupService
                            !line.Contains("site-packages") &&
                            !line.TrimStart().StartsWith("at ") &&
                            !string.IsNullOrWhiteSpace(line)));
+
+    public bool IsEchoSetupComplete =>
+        _state.EchoRuntimeInstalled && _state.EchoModelsDownloaded && EchoBackendService.IsInstalled;
+
+    /// <summary>Raised when the Echo-TTS install finishes successfully.</summary>
+    public event Action? OnEchoSetupCompleted;
+
+    private const string EchoRuntimeUrl =
+        "https://github.com/Cirius0310/echo-tts-cpp/releases/download/v1.0.1/echo-tts-portable-20260430-193225.zip";
+    private const string EchoModelRepo = "tmdarkbr/echo-tts-gguf";
+    private static readonly string[] EchoModelFiles =
+    [
+        "echo-dit-q8.gguf",
+        "onnx/dac_encoder.onnx", "onnx/dac_encoder.onnx.data",
+        "onnx/dac_decoder.onnx", "onnx/dac_decoder.onnx.data",
+    ];
+
+    /// <summary>Downloads the portable Echo-TTS runtime (with its CUDA DLLs) and the Q8 model weights.</summary>
+    public async Task InstallEchoAsync(bool force = false, CancellationToken ct = default)
+    {
+        PathHelper.EnsureDirectories();
+        Directory.CreateDirectory(PathHelper.EchoDir);
+
+        if (force || !_state.EchoRuntimeInstalled || !File.Exists(PathHelper.EchoExe))
+        {
+            Progress(0.02);
+            var zipPath = Path.Combine(PathHelper.EchoDir, "echo-tts-portable.zip");
+            try
+            {
+                await DownloadFileAsync(EchoRuntimeUrl, zipPath, "Echo-TTS runtime", 0.02, 0.35, ct);
+
+                Status("Extracting Echo-TTS runtime...");
+                if (Directory.Exists(PathHelper.EchoBinDir))
+                    Directory.Delete(PathHelper.EchoBinDir, true);
+                await Task.Run(() => System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, PathHelper.EchoBinDir), ct);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
+            {
+                throw Fail($"Failed to install the Echo-TTS runtime: {ex.Message}");
+            }
+            finally
+            {
+                if (File.Exists(zipPath)) File.Delete(zipPath);
+            }
+
+            if (!File.Exists(PathHelper.EchoExe))
+                throw Fail("The Echo-TTS download didn't contain echo-tts.exe.");
+            _state.EchoRuntimeInstalled = true;
+            SaveState();
+        }
+        Progress(0.40);
+
+        if (force || !_state.EchoModelsDownloaded || !EchoBackendService.IsInstalled)
+        {
+            string uv;
+            try { uv = await ProcessHelper.EnsureUvAsync(s => Status($"Installing uv: {s}"), ct); }
+            catch (InvalidOperationException ex) { throw Fail(ex.Message); }
+
+            Status("Ensuring huggingface-hub CLI with Xet support is installed...");
+            await ProcessHelper.RunAsync(uv, "tool install \"huggingface-hub[hf_xet]\" --force",
+                workingDirectory: PathHelper.EchoDir, ct: ct,
+                onOutput: s => Status($"CLI: {s}"));
+
+            Status("Downloading Echo-TTS models from HuggingFace (~5 GB, this may take a while)...");
+            var (exitCode, _, error) = await ProcessHelper.RunAsync(
+                uv, $"tool run hf download {EchoModelRepo} {string.Join(" ", EchoModelFiles)} --local-dir models",
+                workingDirectory: PathHelper.EchoDir, ct: ct,
+                onOutput: s => Status($"Download: {s}"));
+
+            var missing = EchoModelFiles
+                .Where(f => !File.Exists(Path.Combine(PathHelper.EchoModelsDir, f.Replace('/', Path.DirectorySeparatorChar))))
+                .ToList();
+            if (missing.Count > 0)
+            {
+                var details = FilterDownloadErrors(error);
+                throw Fail($"Echo-TTS model download failed (exit {exitCode}); missing {string.Join(", ", missing)}." +
+                           (string.IsNullOrEmpty(details) ? "" : $"\n{details}"));
+            }
+
+            _state.EchoModelsDownloaded = true;
+            SaveState();
+        }
+
+        Progress(1.0);
+        _state.ErrorMessage = null;
+        SaveState();
+        Status("Echo-TTS is installed! Pick it from the engine menu on the Generate page.");
+        OnEchoSetupCompleted?.Invoke();
+    }
+
+    private async Task DownloadFileAsync(string url, string destPath, string label,
+        double progressStart, double progressEnd, CancellationToken ct)
+    {
+        using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+        response.EnsureSuccessStatusCode();
+        var total = response.Content.Headers.ContentLength;
+
+        await using var source = await response.Content.ReadAsStreamAsync(ct);
+        await using var dest = File.Create(destPath);
+        var buffer = new byte[1 << 20];
+        long done = 0;
+        var lastPct = -1;
+        int read;
+        while ((read = await source.ReadAsync(buffer, ct)) > 0)
+        {
+            await dest.WriteAsync(buffer.AsMemory(0, read), ct);
+            done += read;
+            if (total is > 0)
+            {
+                var pct = (int)(done * 100 / total.Value);
+                if (pct == lastPct) continue;
+                lastPct = pct;
+                Status($"Downloading {label}... {pct}% ({done / 1_048_576:N0} / {total.Value / 1_048_576:N0} MB)");
+                Progress(progressStart + (progressEnd - progressStart) * pct / 100.0);
+            }
+        }
+    }
 
     public async Task DownloadModelsAsync(bool force = false, CancellationToken ct = default)
     {

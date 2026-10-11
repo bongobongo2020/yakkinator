@@ -7,6 +7,7 @@ namespace IndexTTSStudio.ViewModels;
 public partial class SetupViewModel : ObservableObject
 {
     private readonly SetupService _setupService;
+    private readonly EchoBackendService _echo;
 
     [ObservableProperty] private string _statusText = "Ready to set up IndexTTS-2";
     [ObservableProperty] private double _progress;
@@ -16,10 +17,12 @@ public partial class SetupViewModel : ObservableObject
     [ObservableProperty] private string _errorText = "";
     [ObservableProperty] private string _logText = "";
     [ObservableProperty] private bool _canRedownloadModels;
+    [ObservableProperty] private bool _isEchoInstalled;
 
-    public SetupViewModel(SetupService setupService)
+    public SetupViewModel(SetupService setupService, EchoBackendService echo)
     {
         _setupService = setupService;
+        _echo = echo;
         _setupService.OnStatusChanged += msg =>
         {
             App.Current.Dispatcher.Invoke(() =>
@@ -35,6 +38,37 @@ public partial class SetupViewModel : ObservableObject
 
         IsComplete = _setupService.IsSetupComplete;
         CanRedownloadModels = _setupService.State.ModelsDownloaded;
+        IsEchoInstalled = _setupService.IsEchoSetupComplete;
+    }
+
+    [RelayCommand]
+    private async Task InstallEchoAsync()
+    {
+        // A reinstall re-downloads everything; a first install resumes whatever is missing
+        var force = IsEchoInstalled;
+        IsRunning = true;
+        HasError = false;
+        ErrorText = "";
+        LogText = "";
+
+        try
+        {
+            // A running server keeps its DLLs locked
+            await _echo.StopAsync();
+            await _setupService.InstallEchoAsync(force);
+            IsEchoInstalled = true;
+            StatusText = "Echo-TTS installed! Pick it from the engine menu on the Generate page.";
+        }
+        catch (Exception ex)
+        {
+            HasError = true;
+            ErrorText = ex.Message;
+            StatusText = "Echo-TTS install failed. See error below.";
+        }
+        finally
+        {
+            IsRunning = false;
+        }
     }
 
     [RelayCommand]
