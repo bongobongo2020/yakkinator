@@ -53,7 +53,25 @@ public partial class MainWindow : FluentWindow
                 await ApplyEngineAsync(_viewModel.SelectedEngine);
         };
 
+        _viewModel.UnloadEnginesAsync = UnloadEnginesAsync;
+        _viewModel.ReloadIndexTtsAsync = () => Dispatcher.InvokeAsync(StartBackendAsync).Task.Unwrap();
+
         Loaded += OnLoaded;
+    }
+
+    /// <summary>Stops every engine to give their GPU memory back, keeping the selected engine: it loads again on
+    /// the next generation (Echo-TTS and Indic-Speak by themselves, IndexTTS-2 through ReloadIndexTtsAsync).</summary>
+    private async Task<bool> UnloadEnginesAsync()
+    {
+        var wasLoaded = _backend.IsRunning || _echo.IsRunning || _indic.IsRunning || _startingBackend;
+        _startCts?.Cancel();
+        await _backend.StopAsync();
+        await _echo.StopAsync();
+        await _indic.StopAsync();
+        _viewModel.IsBackendRunning = false;
+        _viewModel.IsUnloaded = true;
+        _viewModel.BackendStatus = "Unloaded to free GPU memory — loads again on the next generation";
+        return wasLoaded;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -118,6 +136,7 @@ public partial class MainWindow : FluentWindow
     /// <summary>Only one engine stays loaded, so switching frees the other one's GPU memory.</summary>
     private async Task ApplyEngineAsync(TtsEngine engine)
     {
+        _viewModel.IsUnloaded = false;
         try
         {
             if (engine != TtsEngine.IndexTTS)
@@ -173,6 +192,7 @@ public partial class MainWindow : FluentWindow
                 if (ct.IsCancellationRequested) return; // switched to Echo-TTS meanwhile
                 _viewModel.BackendStatus = "Running";
                 _viewModel.IsBackendRunning = true;
+                _viewModel.IsUnloaded = false;
             }, System.Windows.Threading.DispatcherPriority.Background);
         }
         catch (Exception) when (ct.IsCancellationRequested)
@@ -222,7 +242,7 @@ public partial class MainWindow : FluentWindow
         }
 
         // Switched away and back again before the cancelled start finished unwinding
-        if (cancelled && _viewModel.SelectedEngine == TtsEngine.IndexTTS && !_backend.IsRunning)
+        if (cancelled && !_viewModel.IsUnloaded && _viewModel.SelectedEngine == TtsEngine.IndexTTS && !_backend.IsRunning)
             await StartBackendAsync();
     }
 }

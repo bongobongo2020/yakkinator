@@ -149,6 +149,7 @@ public class RemoteServerService : IDisposable
             version = typeof(RemoteServerService).Assembly.GetName().Version?.ToString(3),
             engine = EngineId(_mainVm.SelectedEngine),
             busy = _generateVm.IsGenerating || _jobGate.CurrentCount == 0,
+            unloaded = _mainVm.IsUnloaded,
             engines = new[]
             {
                 new { id = "indextts", name = "IndexTTS-2", installed = _setupService.IsSetupComplete,
@@ -208,6 +209,31 @@ public class RemoteServerService : IDisposable
         }).DisableAntiforgery();
 
         app.MapPost($"{Prefix}/generate", GenerateAsync).DisableAntiforgery();
+
+        // Frees the GPU for another app on this PC (FlipPix calls it before its local LLM runs). The
+        // selected engine stays selected and loads again on the next generation.
+        app.MapPost($"{Prefix}/unload", UnloadAsync).DisableAntiforgery();
+    }
+
+    private async Task<IResult> UnloadAsync(CancellationToken ct)
+    {
+        if (!await _jobGate.WaitAsync(TimeSpan.Zero, ct))
+            return Error(StatusCodes.Status409Conflict, "The PC is generating a remote request.");
+        try
+        {
+            var freed = await OnUiAsync(async () =>
+            {
+                if (_generateVm.IsGenerating || _mainVm.UnloadEnginesAsync is not { } unload) return (bool?)null;
+                return await unload();
+            }).Unwrap();
+            return freed is { } f
+                ? Results.Json(new { freed = f })
+                : Error(StatusCodes.Status409Conflict, "The PC is generating speech.");
+        }
+        finally
+        {
+            _jobGate.Release();
+        }
     }
 
     private async Task<IResult> GenerateAsync(HttpRequest request, CancellationToken ct)
@@ -394,6 +420,10 @@ public class RemoteServerService : IDisposable
 
         if (engine == TtsEngine.IndexTTS)
         {
+            // Unloaded for another app: load it again (EnsureEngine waits below until it's up)
+            if (!_mainVm.IsBackendRunning && _mainVm.IsUnloaded && _mainVm.ReloadIndexTtsAsync is { } reload)
+                _ = await OnUiAsync(() => reload());
+
             // Model load takes a minute or two after a switch
             var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(6);
             while (!_mainVm.IsBackendRunning)

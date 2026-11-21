@@ -43,13 +43,14 @@ public partial class GenerateViewModel : ObservableObject
     {
         TtsEngine.EchoTTS => _setupService.IsEchoSetupComplete,
         TtsEngine.IndicSpeak => _setupService.IsIndicSetupComplete,
-        _ => _mainVm.IsBackendRunning,
+        // Unloaded to free GPU memory: Generate loads it again first
+        _ => _mainVm.IsBackendRunning || _mainVm.IsUnloaded,
     };
     public string EngineReadyText => SelectedEngine switch
     {
         TtsEngine.EchoTTS => "Echo-TTS ready",
         TtsEngine.IndicSpeak => _indic.IsReady ? "Indic-Speak loaded" : "Indic-Speak installed",
-        _ => "Backend ready",
+        _ => _mainVm.IsUnloaded ? "Unloaded · loads on Generate" : "Backend ready",
     };
     public string BackendStatus => SelectedEngine switch
     {
@@ -149,7 +150,12 @@ public partial class GenerateViewModel : ObservableObject
 
         _mainVm.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(MainWindowViewModel.IsBackendRunning))
+            if (e.PropertyName == nameof(MainWindowViewModel.IsUnloaded))
+            {
+                OnPropertyChanged(nameof(IsEngineReady));
+                OnPropertyChanged(nameof(EngineReadyText));
+            }
+            else if (e.PropertyName == nameof(MainWindowViewModel.IsBackendRunning))
             {
                 OnPropertyChanged(nameof(IsEngineReady));
                 if (_mainVm.IsBackendRunning && IsIndexTts)
@@ -299,6 +305,13 @@ public partial class GenerateViewModel : ObservableObject
         try
         {
             if (IsIndic) RememberIndicVoice();
+            if (IsIndexTts && !_mainVm.IsBackendRunning && _mainVm.IsUnloaded && _mainVm.ReloadIndexTtsAsync is { } reload)
+            {
+                StatusText = "Loading IndexTTS-2 again...";
+                await reload();
+                if (!_mainVm.IsBackendRunning) throw new InvalidOperationException("IndexTTS-2 failed to load again.");
+                StatusText = "Generating speech...";
+            }
             var result = IsIndic
                 ? await _indic.GenerateAsync(
                     new IndicRequest(Text, SelectedIndicSpeaker!, IndicStyle,
