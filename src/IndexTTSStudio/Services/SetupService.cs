@@ -166,6 +166,128 @@ public class SetupService
         OnEchoSetupCompleted?.Invoke();
     }
 
+    public bool IsIndicSetupComplete =>
+        _state.IndicEnvInstalled && _state.IndicModelDownloaded && IndicBackendService.IsInstalled;
+
+    /// <summary>Raised when the Indic-Speak install finishes successfully.</summary>
+    public event Action? OnIndicSetupCompleted;
+
+    public const string IndicModelRepo = "bodhan-ai/indic-speak";
+    public const string IndicModelUrl = "https://huggingface.co/bodhan-ai/indic-speak";
+    public const string HfTokenUrl = "https://huggingface.co/settings/tokens";
+    private const string TorchIndexUrl = "https://download.pytorch.org/whl/cu128";
+    private const string IndicPackages =
+        "\"transformers>=5\" snac soundfile numpy safetensors accelerate fastapi uvicorn \"huggingface_hub[hf_xet]\"";
+
+    // Runs inside Indic-Speak's venv. The token comes from the environment (never the command
+    // line or a file); without one, huggingface_hub falls back to an existing `hf auth login`.
+    private const string IndicDownloadScript = """
+        import os, sys
+        from huggingface_hub import snapshot_download
+        from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError, HfHubHTTPError
+        token = os.environ.get("YAK_HF_TOKEN") or None
+        try:
+            snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[2], token=token)
+            # inference.py builds its SNAC quantizer from this public repo; cache it now
+            snapshot_download(repo_id="hubertsiuzdak/snac_24khz")
+        except GatedRepoError:
+            print("YAK_GATED", flush=True); sys.exit(3)
+        except RepositoryNotFoundError:
+            print("YAK_GATED", flush=True); sys.exit(3)
+        except HfHubHTTPError as e:
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code in (401, 403):
+                print("YAK_GATED", flush=True); sys.exit(3)
+            raise
+        print("YAK_DONE", flush=True)
+        """;
+
+    /// <summary>
+    /// Creates Indic-Speak's own Python environment (it needs transformers v5, which IndexTTS can't
+    /// share) and downloads the gated model. <paramref name="hfToken"/> is used for this download only
+    /// and is not stored.
+    /// </summary>
+    public async Task InstallIndicAsync(string? hfToken, bool force = false, CancellationToken ct = default)
+    {
+        PathHelper.EnsureDirectories();
+        Directory.CreateDirectory(PathHelper.IndicDir);
+
+        string uv;
+        try { uv = await ProcessHelper.EnsureUvAsync(s => Status($"Installing uv: {s}"), ct); }
+        catch (InvalidOperationException ex) { throw Fail(ex.Message); }
+
+        if (force || !_state.IndicEnvInstalled || !File.Exists(PathHelper.IndicPython))
+        {
+            Progress(0.05);
+            Status("Creating the Indic-Speak Python environment...");
+            var (venvExit, _, venvErr) = await ProcessHelper.RunAsync(uv, "venv .venv --python 3.11 --seed --allow-existing",
+                workingDirectory: PathHelper.IndicDir, ct: ct, onOutput: s => Status($"venv: {s}"));
+            if (venvExit != 0 || !File.Exists(PathHelper.IndicPython))
+                throw Fail($"Couldn't create the Indic-Speak environment: {venvErr}");
+
+            Progress(0.10);
+            Status("Installing PyTorch with CUDA (~2.5 GB, this takes a while)...");
+            var py = $"--python \"{PathHelper.IndicPython}\"";
+            var (torchExit, _, torchErr) = await ProcessHelper.RunAsync(uv,
+                $"pip install {py} torch --index-url {TorchIndexUrl}",
+                workingDirectory: PathHelper.IndicDir, ct: ct, onOutput: s => Status($"PyTorch: {s}"));
+            if (torchExit != 0)
+                throw Fail($"Failed to install PyTorch: {FilterDownloadErrors(torchErr)}");
+
+            Progress(0.35);
+            Status("Installing Transformers v5, SNAC and the API server...");
+            var (pkgExit, _, pkgErr) = await ProcessHelper.RunAsync(uv, $"pip install {py} {IndicPackages}",
+                workingDirectory: PathHelper.IndicDir, ct: ct, onOutput: s => Status($"Packages: {s}"));
+            if (pkgExit != 0)
+                throw Fail($"Failed to install Indic-Speak dependencies: {FilterDownloadErrors(pkgErr)}");
+
+            _state.IndicEnvInstalled = true;
+            SaveState();
+        }
+        Progress(0.45);
+
+        if (force || !_state.IndicModelDownloaded || !IndicBackendService.IsInstalled)
+        {
+            Status("Downloading Indic-Speak from Hugging Face (~6.6 GB, this may take a while)...");
+            var scriptPath = Path.Combine(PathHelper.IndicDir, "_download.py");
+            File.WriteAllText(scriptPath, IndicDownloadScript);
+            var env = new Dictionary<string, string>
+            {
+                ["PYTHONUTF8"] = "1",
+                ["YAK_HF_TOKEN"] = hfToken?.Trim() ?? "",
+            };
+            int exitCode;
+            string output, error;
+            try
+            {
+                (exitCode, output, error) = await ProcessHelper.RunAsync(PathHelper.IndicPython,
+                    $"\"{scriptPath}\" {IndicModelRepo} model",
+                    workingDirectory: PathHelper.IndicDir, ct: ct, environment: env,
+                    onOutput: s => { if (!s.StartsWith("YAK_")) Status($"Download: {s}"); });
+            }
+            finally
+            {
+                if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            }
+
+            if (output.Contains("YAK_GATED"))
+                throw Fail("Hugging Face refused the download. Indic-Speak is a gated model:\n" +
+                           $"1. Sign in at {IndicModelUrl} and accept its license.\n" +
+                           $"2. Create a Read token at {HfTokenUrl} and paste it into the token box.");
+            if (exitCode != 0 || !IndicBackendService.IsInstalled)
+                throw Fail($"Indic-Speak download failed (exit {exitCode}).\n{FilterDownloadErrors(error)}");
+
+            _state.IndicModelDownloaded = true;
+            SaveState();
+        }
+
+        Progress(1.0);
+        _state.ErrorMessage = null;
+        SaveState();
+        Status("Indic-Speak is installed! Pick it from the engine menu on the Generate page.");
+        OnIndicSetupCompleted?.Invoke();
+    }
+
     private async Task DownloadFileAsync(string url, string destPath, string label,
         double progressStart, double progressEnd, CancellationToken ct)
     {

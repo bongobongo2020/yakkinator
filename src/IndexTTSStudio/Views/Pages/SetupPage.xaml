@@ -96,6 +96,49 @@
                 </StackPanel>
             </ui:Card>
 
+            <TextBlock Text="INDIC-SPEAK (OPTIONAL)" Style="{StaticResource RetroSectionLabel}" Margin="0,4,0,2" />
+            <ui:Card Margin="0,0,0,4" Padding="8,6,8,6"
+                     Background="{StaticResource RetroCard}"
+                     BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,0,0,5">
+                        <Run>A third engine for 22 Indian languages plus Indian English: </Run>
+                        <Hyperlink NavigateUri="https://huggingface.co/bodhan-ai/indic-speak">Indic-Speak</Hyperlink>
+                        <Run>. 95 built-in voices with natural Hinglish-style code-switching (no voice cloning). Downloads PyTorch (~2.5 GB) and the model (~6.6 GB). Needs an NVIDIA GPU with ~10 GB VRAM. Licensed under the Indic Open Model License.</Run>
+                    </TextBlock>
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,0,0,5"
+                               Visibility="{Binding IsIndicInstalled, Converter={StaticResource InverseBoolToVisConverter}}">
+                        <Run FontWeight="SemiBold">The model is gated.</Run>
+                        <Run>First </Run><Hyperlink NavigateUri="https://huggingface.co/bodhan-ai/indic-speak">accept its license on Hugging Face</Hyperlink><Run>, then </Run>
+                        <Hyperlink NavigateUri="https://huggingface.co/settings/tokens">create a Read token</Hyperlink>
+                        <Run> and paste it below. It's used for this download only and isn't saved. (Leave it empty if you've already run "hf auth login".)</Run>
+                    </TextBlock>
+                    <ui:PasswordBox
+                                    PlaceholderText="hf_... (Hugging Face read token)"
+                                    Password="{Binding HfToken, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"
+                                    Margin="0,0,0,5" MaxWidth="360" HorizontalAlignment="Left" MinWidth="300" />
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Install Indic-Speak"
+                                   Icon="{ui:SymbolIcon ArrowDownload24}"
+                                   Command="{Binding InstallIndicCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"
+                                   Visibility="{Binding IsIndicInstalled, Converter={StaticResource InverseBoolToVisConverter}}" />
+                        <ui:Badge Visibility="{Binding IsIndicInstalled, Converter={StaticResource BoolToVisConverter}}"
+                                  Appearance="Success" VerticalAlignment="Center" Margin="0,0,8,0">
+                            <TextBlock Text="Indic-Speak Installed" />
+                        </ui:Badge>
+                        <ui:Button Content="Reinstall Indic-Speak"
+                                   Icon="{ui:SymbolIcon ArrowDownload24}"
+                                   Command="{Binding InstallIndicCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"
+                                   Visibility="{Binding IsIndicInstalled, Converter={StaticResource BoolToVisConverter}}" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
             <ui:InfoBar Title="Setup Error"
                         Message="{Binding ErrorText}"
                         IsOpen="{Binding HasError}"

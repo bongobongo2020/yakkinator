@@ -6,6 +6,12 @@ public class AppSettings
     public bool UseFp16 { get; set; } = true;
     public int ApiPort { get; set; } = 5299;
     public int EchoApiPort { get; set; } = 5300;
+    public int IndicApiPort { get; set; } = 5302;
+
+    // Indic-Speak: last-used voice and style (it has a fixed voice library, no cloning)
+    public string IndicLanguage { get; set; } = "hi";
+    public string IndicSpeaker { get; set; } = "Kavya";
+    public string IndicStyle { get; set; } = "";
     public string ModelVersion { get; set; } = "IndexTTS-2";
     public bool AutoStartBackend { get; set; } = true;
     public string OutputDirectory { get; set; } = "";

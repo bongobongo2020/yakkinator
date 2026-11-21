@@ -10,6 +10,8 @@ public class SetupState
     public bool ModelsDownloaded { get; set; }
     public bool EchoRuntimeInstalled { get; set; }
     public bool EchoModelsDownloaded { get; set; }
+    public bool IndicEnvInstalled { get; set; }
+    public bool IndicModelDownloaded { get; set; }
     public string? ModelVersion { get; set; } = "IndexTTS-2";
     public DateTime? LastSetupDate { get; set; }
     public string? ErrorMessage { get; set; }

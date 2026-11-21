@@ -16,6 +16,7 @@ public partial class MainWindow : FluentWindow
     private readonly PythonBackendService _backend;
     private readonly SetupService _setupService;
     private readonly EchoBackendService _echo;
+    private readonly IndicBackendService _indic;
     private CancellationTokenSource? _startCts;
 
     public MainWindow()
@@ -24,6 +25,7 @@ public partial class MainWindow : FluentWindow
         _backend = App.Services.GetRequiredService<PythonBackendService>();
         _setupService = App.Services.GetRequiredService<SetupService>();
         _echo = App.Services.GetRequiredService<EchoBackendService>();
+        _indic = App.Services.GetRequiredService<IndicBackendService>();
         _viewModel.SelectedEngine = App.Services.GetRequiredService<SettingsService>().Settings.Engine;
         DataContext = _viewModel;
 
@@ -39,6 +41,11 @@ public partial class MainWindow : FluentWindow
         {
             if (_viewModel.SelectedEngine == TtsEngine.IndexTTS && !_backend.IsRunning)
                 await StartBackendAsync();
+        });
+        _setupService.OnIndicSetupCompleted += () => Dispatcher.BeginInvoke(() =>
+        {
+            if (_viewModel.SelectedEngine == TtsEngine.IndicSpeak)
+                _ = _indic.WarmUpAsync();
         });
         _viewModel.PropertyChanged += async (_, e) =>
         {
@@ -81,6 +88,12 @@ public partial class MainWindow : FluentWindow
                 // Echo-TTS loads lazily on the first generation (it needs the chosen voice)
                 NavigationView.Navigate(_setupService.IsEchoSetupComplete ? typeof(GeneratePage) : typeof(SetupPage));
             }
+            else if (_viewModel.SelectedEngine == TtsEngine.IndicSpeak)
+            {
+                NavigationView.Navigate(_setupService.IsIndicSetupComplete ? typeof(GeneratePage) : typeof(SetupPage));
+                if (_setupService.IsIndicSetupComplete)
+                    _ = _indic.WarmUpAsync();
+            }
             else if (!_setupService.IsSetupComplete)
             {
                 NavigationView.Navigate(typeof(SetupPage));
@@ -107,16 +120,26 @@ public partial class MainWindow : FluentWindow
     {
         try
         {
-            if (engine == TtsEngine.EchoTTS)
+            if (engine != TtsEngine.IndexTTS)
             {
                 _startCts?.Cancel();
                 await _backend.StopAsync();
                 _viewModel.IsBackendRunning = false;
                 _viewModel.BackendStatus = "Stopped";
             }
-            else
-            {
+            if (engine != TtsEngine.EchoTTS)
                 await _echo.StopAsync();
+            if (engine != TtsEngine.IndicSpeak)
+                await _indic.StopAsync();
+
+            if (engine == TtsEngine.IndicSpeak)
+            {
+                // Start loading now so the model is warm by the time the user has typed something
+                if (_setupService.IsIndicSetupComplete)
+                    _ = _indic.WarmUpAsync();
+            }
+            else if (engine == TtsEngine.IndexTTS)
+            {
                 if (_setupService.IsSetupComplete)
                     await StartBackendAsync();
                 else

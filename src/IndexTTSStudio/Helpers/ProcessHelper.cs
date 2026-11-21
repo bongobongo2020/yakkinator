@@ -7,7 +7,8 @@ public static class ProcessHelper
 {
     public static async Task<(int exitCode, string output, string error)> RunAsync(
         string fileName, string arguments, string? workingDirectory = null,
-        CancellationToken ct = default, Action<string>? onOutput = null)
+        CancellationToken ct = default, Action<string>? onOutput = null,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo
@@ -20,6 +21,9 @@ public static class ProcessHelper
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        if (environment != null)
+            foreach (var (key, value) in environment)
+                process.StartInfo.Environment[key] = value;
 
         var output = new System.Text.StringBuilder();
         var error = new System.Text.StringBuilder();

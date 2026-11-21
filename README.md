@@ -110,9 +110,10 @@ The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Signe
 Use the **Engine** menu at the top of the Generate page to switch between:
 
 - **IndexTTS-2** (default): voice cloning with emotion control (reference audio, sliders, or inferred from text).
+- **Indic-Speak**: [bodhan-ai/indic-speak](https://huggingface.co/bodhan-ai/indic-speak), built for 22 Indian languages plus Indian English, with 95 built-in voices. Pick a **language** and **speaker** instead of a voice sample (it can't clone voices). Mixed text like Hinglish, numbers and formulas stays in one voice. An optional **style** can be an emotion label (`ANGER`, `FEAR`) or a short description; style control is still preview quality. Install it from the **Setup** page (PyTorch ~2.5 GB + model ~6.6 GB, NVIDIA GPU with ~10 GB VRAM recommended). The model is gated: accept its license on Hugging Face, create a Read token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens), and paste it into Setup. The token is used for that download only and isn't saved. Weights are under the Indic Open Model License.
 - **Echo-TTS**: a fast C++ engine ([echo-tts-cpp](https://github.com/Cirius0310/echo-tts-cpp)) that clones the voice sample directly. Install it once from the **Setup** page (portable runtime ~1.7 GB + Q8 model ~5 GB, NVIDIA GPU required). Its model weights and outputs are CC-BY-NC-SA 4.0, so non-commercial use only.
 
-Only one engine is loaded at a time, so switching frees the other's GPU memory. Echo-TTS loads on your first generation, and reloads when you use a new voice or change its parameters.
+Only one engine is loaded at a time, so switching frees the others' GPU memory. Indic-Speak starts loading as soon as you pick it, and long texts are generated sentence by sentence. Echo-TTS loads on your first generation, and reloads when you use a new voice or change its parameters.
 
 ---
 

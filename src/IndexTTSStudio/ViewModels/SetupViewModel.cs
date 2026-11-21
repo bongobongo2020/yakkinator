@@ -8,6 +8,7 @@ public partial class SetupViewModel : ObservableObject
 {
     private readonly SetupService _setupService;
     private readonly EchoBackendService _echo;
+    private readonly IndicBackendService _indic;
 
     [ObservableProperty] private string _statusText = "Ready to set up IndexTTS-2";
     [ObservableProperty] private double _progress;
@@ -18,11 +19,18 @@ public partial class SetupViewModel : ObservableObject
     [ObservableProperty] private string _logText = "";
     [ObservableProperty] private bool _canRedownloadModels;
     [ObservableProperty] private bool _isEchoInstalled;
+    [ObservableProperty] private bool _isIndicInstalled;
+    /// <summary>Hugging Face read token, used once for the gated download and never saved.</summary>
+    [ObservableProperty] private string _hfToken = "";
 
-    public SetupViewModel(SetupService setupService, EchoBackendService echo)
+    public string IndicModelUrl => SetupService.IndicModelUrl;
+    public string HfTokenUrl => SetupService.HfTokenUrl;
+
+    public SetupViewModel(SetupService setupService, EchoBackendService echo, IndicBackendService indic)
     {
         _setupService = setupService;
         _echo = echo;
+        _indic = indic;
         _setupService.OnStatusChanged += msg =>
         {
             App.Current.Dispatcher.Invoke(() =>
@@ -39,6 +47,37 @@ public partial class SetupViewModel : ObservableObject
         IsComplete = _setupService.IsSetupComplete;
         CanRedownloadModels = _setupService.State.ModelsDownloaded;
         IsEchoInstalled = _setupService.IsEchoSetupComplete;
+        IsIndicInstalled = _setupService.IsIndicSetupComplete;
+    }
+
+    [RelayCommand]
+    private async Task InstallIndicAsync()
+    {
+        var force = IsIndicInstalled;
+        IsRunning = true;
+        HasError = false;
+        ErrorText = "";
+        LogText = "";
+
+        try
+        {
+            // A running server keeps the model files open
+            await _indic.StopAsync();
+            await _setupService.InstallIndicAsync(HfToken, force);
+            IsIndicInstalled = true;
+            HfToken = "";
+            StatusText = "Indic-Speak installed! Pick it from the engine menu on the Generate page.";
+        }
+        catch (Exception ex)
+        {
+            HasError = true;
+            ErrorText = ex.Message;
+            StatusText = "Indic-Speak install failed. See error below.";
+        }
+        finally
+        {
+            IsRunning = false;
+        }
     }
 
     [RelayCommand]

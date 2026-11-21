@@ -27,9 +27,58 @@
 
                 <!-- Voice Selection -->
                 <TextBlock Text="VOICE" Style="{StaticResource RetroSectionLabel}" />
+
+                <!-- Indic-Speak: built-in voice library (no cloning) -->
+                <ui:Card Margin="0,0,0,5" Padding="8,5,8,6"
+                         Background="{StaticResource RetroCard}"
+                         BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5"
+                         Visibility="{Binding IsIndic, Converter={StaticResource BoolToVisConverter}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="Language" FontSize="10" Opacity="0.6" />
+                        <ComboBox Grid.Row="1"
+                                  ItemsSource="{Binding IndicLanguages}"
+                                  DisplayMemberPath="DisplayName"
+                                  SelectedItem="{Binding SelectedIndicLanguage}"
+                                  IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBoolConverter}}" />
+
+                        <TextBlock Grid.Column="2" Text="Speaker" FontSize="10" Opacity="0.6" />
+                        <ComboBox Grid.Row="1" Grid.Column="2"
+                                  ItemsSource="{Binding IndicSpeakers}"
+                                  SelectedItem="{Binding SelectedIndicSpeaker}"
+                                  IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBoolConverter}}" />
+
+                        <TextBlock Grid.Row="2" Grid.ColumnSpan="3" Text="Style (optional, preview quality)"
+                                   FontSize="10" Opacity="0.6" Margin="0,5,0,0" />
+                        <ComboBox Grid.Row="3" Grid.ColumnSpan="3"
+                                  IsEditable="True"
+                                  ItemsSource="{Binding IndicStyleSuggestions}"
+                                  Text="{Binding IndicStyle, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="An emotion label such as ANGER or FEAR, or a short description like 'calm, like a teacher explaining'. Leave empty for the speaker's natural delivery."
+                                  IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBoolConverter}}" />
+
+                        <TextBlock Grid.Row="4" Grid.ColumnSpan="3"
+                                   Text="Built-in voices only; Indic-Speak can't clone a sample. A speaker also reads English, so mixed Hindi/English text stays in one voice."
+                                   TextWrapping="Wrap" FontSize="10" Opacity="0.45" Margin="0,5,0,0" />
+                    </Grid>
+                </ui:Card>
+
                 <ui:Card Margin="0,0,0,5" Padding="8,5,8,5"
                          Background="{StaticResource RetroCard}"
-                         BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+                         BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5"
+                         Visibility="{Binding UsesVoiceSample, Converter={StaticResource BoolToVisConverter}}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -63,9 +112,13 @@
                             MinHeight="50"
                             MaxHeight="100"
                             Margin="0,0,0,5" />
+                <TextBlock Text="{Binding IndicTextHint}"
+                           Visibility="{Binding IsIndic, Converter={StaticResource BoolToVisConverter}}"
+                           TextWrapping="Wrap" Opacity="0.5" FontSize="10" Margin="0,-2,0,6" />
 
                 <!-- Emotion Control (IndexTTS-2 only) -->
-                <TextBlock Text="EMOTION" Style="{StaticResource RetroSectionLabel}" />
+                <TextBlock Text="EMOTION" Style="{StaticResource RetroSectionLabel}"
+                           Visibility="{Binding UsesVoiceSample, Converter={StaticResource BoolToVisConverter}}" />
                 <TextBlock Text="Echo-TTS takes its delivery from the voice sample; emotion controls are IndexTTS-2 only."
                            Visibility="{Binding IsEcho, Converter={StaticResource BoolToVisConverter}}"
                            TextWrapping="Wrap" Opacity="0.6" FontSize="11" Margin="0,0,0,6" />
@@ -291,6 +344,32 @@
                     </StackPanel>
                 </ui:CardExpander>
 
+                <ui:CardExpander Header="Indic-Speak Parameters" Margin="0,0,0,5"
+                                 Background="{StaticResource RetroCard}"
+                                 BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5"
+                                 Visibility="{Binding IsIndic, Converter={StaticResource BoolToVisConverter}}">
+                    <StackPanel Margin="2,1,2,2">
+                        <TextBlock Text="{Binding IndicTemperature, StringFormat=Temperature: {0:F2}}" FontSize="10" Opacity="0.6" />
+                        <Slider Value="{Binding IndicTemperature}" Minimum="0.1" Maximum="1.2"
+                                TickFrequency="0.05" IsSnapToTickEnabled="True" Margin="0,0,0,3" />
+
+                        <TextBlock Text="{Binding IndicTopP, StringFormat=Top P: {0:F2}}" FontSize="10" Opacity="0.6" />
+                        <Slider Value="{Binding IndicTopP}" Minimum="0.1" Maximum="1.0"
+                                TickFrequency="0.05" IsSnapToTickEnabled="True" Margin="0,0,0,3" />
+
+                        <TextBlock Text="{Binding IndicTopK, StringFormat=Top K: {0}}" FontSize="10" Opacity="0.6" />
+                        <Slider Value="{Binding IndicTopK}" Minimum="1" Maximum="100"
+                                TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,0,0,3" />
+
+                        <TextBlock Text="Seed (empty = random)" FontSize="10" Opacity="0.6" />
+                        <ui:TextBox Text="{Binding IndicSeed, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,3" />
+
+                        <TextBlock Text="Defaults come from the model card. Lower temperature = steadier, flatter delivery."
+                                   TextWrapping="Wrap" FontSize="10" Opacity="0.45" />
+                    </StackPanel>
+                </ui:CardExpander>
+
+                <StackPanel Visibility="{Binding UsesVoiceSample, Converter={StaticResource BoolToVisConverter}}">
                 <TextBlock Text="SAVED VOICES" Style="{StaticResource RetroSectionLabel}" Margin="0,3,0,2" />
                 <ItemsControl ItemsSource="{Binding SavedVoices}">
                     <ItemsControl.ItemTemplate>
@@ -309,6 +388,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

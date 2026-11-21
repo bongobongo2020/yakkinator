@@ -12,6 +12,7 @@ public partial class GenerateViewModel : ObservableObject
 {
     private readonly TTSApiClient _apiClient;
     private readonly EchoBackendService _echo;
+    private readonly IndicBackendService _indic;
     private readonly AudioPlayerService _audioPlayer;
     private readonly VoiceLibraryService _voiceLibrary;
     private readonly MainWindowViewModel _mainVm;
@@ -22,21 +23,63 @@ public partial class GenerateViewModel : ObservableObject
     [
         new(TtsEngine.IndexTTS, "IndexTTS-2"),
         new(TtsEngine.EchoTTS, "Echo-TTS"),
+        new(TtsEngine.IndicSpeak, "Indic-Speak (Indian languages)"),
     ];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIndexTts), nameof(IsEcho), nameof(IsEngineReady), nameof(BackendStatus), nameof(EngineReadyText))]
+    [NotifyPropertyChangedFor(nameof(IsIndexTts), nameof(IsEcho), nameof(IsIndic), nameof(UsesVoiceSample),
+        nameof(IsEngineReady), nameof(BackendStatus), nameof(EngineReadyText))]
     private TtsEngine _selectedEngine;
 
     public bool IsIndexTts => SelectedEngine == TtsEngine.IndexTTS;
     public bool IsEcho => SelectedEngine == TtsEngine.EchoTTS;
+    public bool IsIndic => SelectedEngine == TtsEngine.IndicSpeak;
+    /// <summary>IndexTTS and Echo clone a voice sample; Indic-Speak uses its own voice library.</summary>
+    public bool UsesVoiceSample => !IsIndic;
 
-    // Echo-TTS loads on the first generation (it needs the voice up front), so it's "ready" once installed
-    public bool IsEngineReady => IsEcho ? _setupService.IsEchoSetupComplete : _mainVm.IsBackendRunning;
-    public string EngineReadyText => IsEcho ? "Echo-TTS ready" : "Backend ready";
-    public string BackendStatus => IsEcho
-        ? "Echo-TTS isn't installed yet. Install it from the Setup page."
-        : _mainVm.BackendStatus;
+    // Echo-TTS loads on the first generation (it needs the voice up front), and Indic-Speak loads in
+    // the background when picked (a generation waits for it), so both are "ready" once installed.
+    public bool IsEngineReady => SelectedEngine switch
+    {
+        TtsEngine.EchoTTS => _setupService.IsEchoSetupComplete,
+        TtsEngine.IndicSpeak => _setupService.IsIndicSetupComplete,
+        _ => _mainVm.IsBackendRunning,
+    };
+    public string EngineReadyText => SelectedEngine switch
+    {
+        TtsEngine.EchoTTS => "Echo-TTS ready",
+        TtsEngine.IndicSpeak => _indic.IsReady ? "Indic-Speak loaded" : "Indic-Speak installed",
+        _ => "Backend ready",
+    };
+    public string BackendStatus => SelectedEngine switch
+    {
+        TtsEngine.EchoTTS => "Echo-TTS isn't installed yet. Install it from the Setup page.",
+        TtsEngine.IndicSpeak => "Indic-Speak isn't installed yet. Install it from the Setup page.",
+        _ => _mainVm.BackendStatus,
+    };
+
+    // Indic-Speak voice library: pick a language, then one of its trained speakers
+    public IReadOnlyList<IndicLanguage> IndicLanguages => IndicVoices.Languages;
+    public IReadOnlyList<string> IndicStyleSuggestions => IndicVoices.StyleSuggestions;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IndicSpeakers), nameof(IndicTextHint))]
+    private IndicLanguage? _selectedIndicLanguage;
+
+    public IReadOnlyList<string> IndicSpeakers => SelectedIndicLanguage?.Speakers ?? [];
+
+    [ObservableProperty] private string? _selectedIndicSpeaker;
+    [ObservableProperty] private string _indicStyle = "";
+
+    public string IndicTextHint => SelectedIndicLanguage?.Code == "en"
+        ? "Indian-accented English. Indic words in their own script are read naturally too."
+        : $"Type in {SelectedIndicLanguage?.Name ?? "the language"} script. English words, numbers and formulas mixed in are read in the same voice.";
+
+    // Indic-Speak sampling (model card defaults); seed empty = random
+    [ObservableProperty] private float _indicTemperature = 0.6f;
+    [ObservableProperty] private float _indicTopP = 0.9f;
+    [ObservableProperty] private int _indicTopK = 50;
+    [ObservableProperty] private string _indicSeed = "";
 
     [ObservableProperty] private string _text = "";
     [ObservableProperty] private string _voiceFilePath = "";
@@ -79,12 +122,13 @@ public partial class GenerateViewModel : ObservableObject
     // Voice library
     [ObservableProperty] private List<VoiceProfile> _savedVoices = [];
 
-    public GenerateViewModel(TTSApiClient apiClient, EchoBackendService echo, AudioPlayerService audioPlayer,
-        VoiceLibraryService voiceLibrary, MainWindowViewModel mainVm, SettingsService settingsService,
-        SetupService setupService)
+    public GenerateViewModel(TTSApiClient apiClient, EchoBackendService echo, IndicBackendService indic,
+        AudioPlayerService audioPlayer, VoiceLibraryService voiceLibrary, MainWindowViewModel mainVm,
+        SettingsService settingsService, SetupService setupService)
     {
         _apiClient = apiClient;
         _echo = echo;
+        _indic = indic;
         _audioPlayer = audioPlayer;
         _voiceLibrary = voiceLibrary;
         _mainVm = mainVm;
@@ -96,6 +140,12 @@ public partial class GenerateViewModel : ObservableObject
         _temperature = settings.DefaultTemperature;
         _topP = settings.DefaultTopP;
         _topK = settings.DefaultTopK;
+
+        _selectedIndicLanguage = IndicVoices.Find(settings.IndicLanguage) ?? IndicVoices.Languages[0];
+        _selectedIndicSpeaker = _selectedIndicLanguage.Speakers
+            .FirstOrDefault(s => string.Equals(s, settings.IndicSpeaker, StringComparison.OrdinalIgnoreCase))
+            ?? _selectedIndicLanguage.Speakers[0];
+        _indicStyle = settings.IndicStyle ?? "";
 
         _mainVm.PropertyChanged += (_, e) =>
         {
@@ -113,18 +163,35 @@ public partial class GenerateViewModel : ObservableObject
             OnPropertyChanged(nameof(IsEngineReady));
             if (IsEcho) StatusText = "Echo-TTS ready";
         });
+        _setupService.OnIndicSetupCompleted += () => App.Current.Dispatcher.BeginInvoke(() =>
+        {
+            OnPropertyChanged(nameof(IsEngineReady));
+            OnPropertyChanged(nameof(EngineReadyText));
+        });
+        _indic.StateChanged += () => App.Current.Dispatcher.BeginInvoke(() =>
+            OnPropertyChanged(nameof(EngineReadyText)));
         _audioPlayer.OnPlaybackStopped += () =>
             App.Current.Dispatcher.Invoke(() => IsPlaying = false);
         _voiceLibrary.VoicesChanged += RefreshVoices;
         RefreshVoices();
     }
 
+    partial void OnSelectedIndicLanguageChanged(IndicLanguage? value)
+    {
+        // Keep the speaker if this language has it too (e.g. Amit speaks Hindi and English)
+        if (value != null && (SelectedIndicSpeaker == null || !value.Speakers.Contains(SelectedIndicSpeaker)))
+            SelectedIndicSpeaker = value.Speakers[0];
+    }
+
     partial void OnSelectedEngineChanged(TtsEngine value)
     {
         HasError = false;
-        StatusText = value == TtsEngine.EchoTTS && _setupService.IsEchoSetupComplete
-            ? "Echo-TTS loads on the first generation."
-            : "Ready";
+        StatusText = value switch
+        {
+            TtsEngine.EchoTTS when _setupService.IsEchoSetupComplete => "Echo-TTS loads on the first generation.",
+            TtsEngine.IndicSpeak when _setupService.IsIndicSetupComplete => "Indic-Speak is loading in the background.",
+            _ => "Ready",
+        };
         _mainVm.SelectedEngine = value;
         _settingsService.Settings.Engine = value;
         try { _settingsService.Save(); }
@@ -187,7 +254,25 @@ public partial class GenerateViewModel : ObservableObject
             StatusText = "Please enter text to synthesize.";
             return;
         }
-        if (string.IsNullOrWhiteSpace(VoiceFilePath) || !System.IO.File.Exists(VoiceFilePath))
+        if (IsIndic)
+        {
+            if (!_setupService.IsIndicSetupComplete)
+            {
+                StatusText = "Install Indic-Speak from the Setup page first.";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(SelectedIndicSpeaker))
+            {
+                StatusText = "Please pick a speaker.";
+                return;
+            }
+            if (!string.IsNullOrWhiteSpace(IndicSeed) && !int.TryParse(IndicSeed.Trim(), out _))
+            {
+                StatusText = "Seed must be a whole number (or empty for random).";
+                return;
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(VoiceFilePath) || !System.IO.File.Exists(VoiceFilePath))
         {
             StatusText = "Please select a reference voice file.";
             return;
@@ -213,7 +298,14 @@ public partial class GenerateViewModel : ObservableObject
 
         try
         {
-            var result = IsEcho
+            if (IsIndic) RememberIndicVoice();
+            var result = IsIndic
+                ? await _indic.GenerateAsync(
+                    new IndicRequest(Text, SelectedIndicSpeaker!, IndicStyle,
+                        IndicTemperature, IndicTopP, IndicTopK,
+                        int.TryParse(IndicSeed?.Trim(), out var seed) ? seed : null),
+                    status => App.Current.Dispatcher.BeginInvoke(() => StatusText = status))
+                : IsEcho
                 ? await _echo.GenerateAsync(Text, VoiceFilePath,
                     new EchoSamplerSettings(EchoSteps, EchoCfgText, EchoCfgSpeaker, EchoSeed),
                     status => App.Current.Dispatcher.BeginInvoke(() => StatusText = status))
@@ -241,8 +333,11 @@ public partial class GenerateViewModel : ObservableObject
                 StatusText = $"Generation complete! ({result.JobId})";
                 // Remember the voice and its emotion settings; a failure here must not
                 // turn a successful generation into an error.
-                try { SaveCurrentVoice(); }
-                catch (Exception ex) { LogError($"Auto-saving voice failed: {ex.Message}"); }
+                if (UsesVoiceSample)
+                {
+                    try { SaveCurrentVoice(); }
+                    catch (Exception ex) { LogError($"Auto-saving voice failed: {ex.Message}"); }
+                }
             }
             else
             {
@@ -312,6 +407,17 @@ public partial class GenerateViewModel : ObservableObject
         var name = Path.GetFileNameWithoutExtension(VoiceFilePath);
         VoiceFilePath = _voiceLibrary.SaveVoice(name, VoiceFilePath, EmotionMode, EmotionAlpha,
             [Joy, Anger, Sadness, Fear, Disgust, Melancholy, Surprise, Calm]);
+    }
+
+    /// <summary>Saves the Indic-Speak language, speaker and style so they're picked next time.</summary>
+    private void RememberIndicVoice()
+    {
+        var settings = _settingsService.Settings;
+        settings.IndicLanguage = SelectedIndicLanguage?.Code ?? settings.IndicLanguage;
+        settings.IndicSpeaker = SelectedIndicSpeaker ?? settings.IndicSpeaker;
+        settings.IndicStyle = IndicStyle ?? "";
+        try { _settingsService.Save(); }
+        catch (Exception ex) { LogError($"Saving Indic-Speak voice failed: {ex.Message}"); }
     }
 
     private void ShowError(string message)

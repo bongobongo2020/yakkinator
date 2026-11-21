@@ -33,6 +33,7 @@ public class RemoteServerService : IDisposable
     private readonly SetupService _setupService;
     private readonly TTSApiClient _apiClient;
     private readonly EchoBackendService _echo;
+    private readonly IndicBackendService _indic;
     private readonly VoiceLibraryService _voiceLibrary;
     private readonly MainWindowViewModel _mainVm;
     private readonly GenerateViewModel _generateVm;
@@ -46,13 +47,14 @@ public class RemoteServerService : IDisposable
     public event Action? StatusChanged;
 
     public RemoteServerService(SettingsService settingsService, SetupService setupService, TTSApiClient apiClient,
-        EchoBackendService echo, VoiceLibraryService voiceLibrary, MainWindowViewModel mainVm,
-        GenerateViewModel generateVm)
+        EchoBackendService echo, IndicBackendService indic, VoiceLibraryService voiceLibrary,
+        MainWindowViewModel mainVm, GenerateViewModel generateVm)
     {
         _settingsService = settingsService;
         _setupService = setupService;
         _apiClient = apiClient;
         _echo = echo;
+        _indic = indic;
         _voiceLibrary = voiceLibrary;
         _mainVm = mainVm;
         _generateVm = generateVm;
@@ -153,7 +155,22 @@ public class RemoteServerService : IDisposable
                       ready = _mainVm.IsBackendRunning, supportsEmotion = true },
                 new { id = "echo", name = "Echo-TTS", installed = _setupService.IsEchoSetupComplete,
                       ready = _echo.IsRunning, supportsEmotion = false },
+                new { id = "indic", name = "Indic-Speak", installed = _setupService.IsIndicSetupComplete,
+                      ready = _indic.IsReady, supportsEmotion = false },
             },
+        }));
+
+        // Indic-Speak's built-in voices (it can't clone samples): pass one as "speaker" to /generate
+        app.MapGet($"{Prefix}/indic/voices", () => Results.Json(new
+        {
+            languages = IndicVoices.Languages.Select(l => new
+            {
+                code = l.Code,
+                name = l.Name,
+                preview = l.IsPreview,
+                speakers = l.Speakers,
+            }),
+            styles = IndicVoices.StyleSuggestions.Where(s => s.Length > 0),
         }));
 
         app.MapGet($"{Prefix}/voices", () => Results.Json(new
@@ -213,8 +230,12 @@ public class RemoteServerService : IDisposable
         {
             case "indextts": engine = TtsEngine.IndexTTS; break;
             case "echo": engine = TtsEngine.EchoTTS; break;
+            case "indic": engine = TtsEngine.IndicSpeak; break;
             default: return Error(StatusCodes.Status400BadRequest, "Unknown engine");
         }
+
+        if (engine == TtsEngine.IndicSpeak)
+            return await GenerateIndicAsync(request, text, Field, F, I, ct);
 
         // Voice: an uploaded file, or one from this PC's voice library
         string voicePath;
@@ -304,6 +325,50 @@ public class RemoteServerService : IDisposable
         }
     }
 
+    /// <summary>Indic-Speak takes a built-in speaker name (plus optional style) instead of a voice sample.</summary>
+    private async Task<IResult> GenerateIndicAsync(HttpRequest request, string text, Func<string, string, string> field,
+        Func<string, float, float> f, Func<string, int, int> i, CancellationToken ct)
+    {
+        var speaker = field("speaker", "").Trim();
+        if (!IndicVoices.IsKnownSpeaker(speaker))
+            return Error(StatusCodes.Status400BadRequest, "Pick an Indic-Speak speaker (see /indic/voices)");
+        var seedText = field("seed", "").Trim();
+        int? seed = int.TryParse(seedText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) ? s : null;
+
+        if (!await _jobGate.WaitAsync(TimeSpan.Zero, ct))
+            return Error(StatusCodes.Status409Conflict, "The PC is already generating a remote request. Try again shortly.");
+        try
+        {
+            var switchError = await EnsureEngineAsync(TtsEngine.IndicSpeak, ct);
+            if (switchError != null) return switchError;
+
+            var result = await _indic.GenerateAsync(new IndicRequest(text, speaker, field("style", ""),
+                Math.Clamp(f("temperature", 0.6f), 0.05f, 2f),
+                Math.Clamp(f("top_p", 0.9f), 0.05f, 1f),
+                Math.Clamp(i("top_k", 50), 1, 200),
+                seed), ct: ct);
+
+            if (!result.Success || result.AudioFilePath == null)
+                return Error(StatusCodes.Status500InternalServerError, result.ErrorMessage ?? "Generation failed");
+
+            var audio = await File.ReadAllBytesAsync(result.AudioFilePath, ct);
+            request.HttpContext.Response.Headers["X-Job-Id"] = result.JobId;
+            return Results.File(audio, "audio/wav", $"yakkinator_{result.JobId}.wav");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return Results.Empty;
+        }
+        catch (Exception ex)
+        {
+            return Error(StatusCodes.Status500InternalServerError, ex.Message);
+        }
+        finally
+        {
+            _jobGate.Release();
+        }
+    }
+
     /// <summary>Switches the PC to <paramref name="engine"/> (only one stays loaded) and waits until it can generate.</summary>
     private async Task<IResult?> EnsureEngineAsync(TtsEngine engine, CancellationToken ct)
     {
@@ -311,6 +376,8 @@ public class RemoteServerService : IDisposable
             return Error(StatusCodes.Status503ServiceUnavailable, "Echo-TTS isn't installed on the PC.");
         if (engine == TtsEngine.IndexTTS && !_setupService.IsSetupComplete)
             return Error(StatusCodes.Status503ServiceUnavailable, "IndexTTS-2 isn't set up on the PC.");
+        if (engine == TtsEngine.IndicSpeak && !_setupService.IsIndicSetupComplete)
+            return Error(StatusCodes.Status503ServiceUnavailable, "Indic-Speak isn't installed on the PC.");
 
         if (_mainVm.SelectedEngine != engine)
         {
@@ -395,7 +462,12 @@ public class RemoteServerService : IDisposable
     private static Task<T> OnUiAsync<T>(Func<T> action) =>
         System.Windows.Application.Current.Dispatcher.InvokeAsync(action).Task;
 
-    private static string EngineId(TtsEngine engine) => engine == TtsEngine.EchoTTS ? "echo" : "indextts";
+    private static string EngineId(TtsEngine engine) => engine switch
+    {
+        TtsEngine.EchoTTS => "echo",
+        TtsEngine.IndicSpeak => "indic",
+        _ => "indextts",
+    };
 
     private static string ContentTypeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {

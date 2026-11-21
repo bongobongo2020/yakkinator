@@ -27,30 +27,35 @@ public static class PathHelper
     /// <summary>WAV copies of MP3/FLAC voices; Echo-TTS only reads WAV.</summary>
     public static string EchoVoiceCacheDir => Path.Combine(EchoDir, "voice-cache");
 
-    /// <summary>
-    /// Path to the api_server.py bundled with the .NET app.
-    /// At dev time, this is in the repo's python/ folder.
-    /// </summary>
-    public static string ApiServerScript
+    // Indic-Speak: its own venv (needs transformers v5) and the gated HF model repo
+    public static string IndicDir => Path.Combine(AppDataDir, "indic-speak");
+    public static string IndicVenvDir => Path.Combine(IndicDir, ".venv");
+    public static string IndicPython => Path.Combine(IndicVenvDir, "Scripts", "python.exe");
+    public static string IndicModelDir => Path.Combine(IndicDir, "model");
+
+    /// <summary>Path to the api_server.py bundled with the .NET app.</summary>
+    public static string ApiServerScript => FindBundledScript("api_server.py");
+
+    /// <summary>Path to the indic_server.py bundled with the .NET app.</summary>
+    public static string IndicServerScript => FindBundledScript("indic_server.py");
+
+    /// <summary>Finds a script next to the exe (published), or at dev time in the repo's python/ folder.</summary>
+    private static string FindBundledScript(string fileName)
     {
-        get
+        var exeDir = AppContext.BaseDirectory;
+        var published = Path.Combine(exeDir, "python", fileName);
+        if (File.Exists(published)) return published;
+
+        // Dev time: walk up to repo root
+        var dir = new DirectoryInfo(exeDir);
+        while (dir != null)
         {
-            // First check if it's next to the exe (published)
-            var exeDir = AppContext.BaseDirectory;
-            var published = Path.Combine(exeDir, "python", "api_server.py");
-            if (File.Exists(published)) return published;
-
-            // Dev time: walk up to repo root
-            var dir = new DirectoryInfo(exeDir);
-            while (dir != null)
-            {
-                var candidate = Path.Combine(dir.FullName, "python", "api_server.py");
-                if (File.Exists(candidate)) return candidate;
-                dir = dir.Parent;
-            }
-
-            throw new FileNotFoundException("api_server.py not found");
+            var candidate = Path.Combine(dir.FullName, "python", fileName);
+            if (File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
         }
+
+        throw new FileNotFoundException($"{fileName} not found");
     }
 
     public static void EnsureDirectories()

@@ -26,5 +26,8 @@
     <None Include="..\..\python\api_server.py" Link="python\api_server.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\python\indic_server.py" Link="python\indic_server.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>
