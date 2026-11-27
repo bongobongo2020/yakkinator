@@ -1,6 +1,6 @@
 # The Yakkinator 🤖
 
-> A retro-futuristic Text-to-Speech studio powered by IndexTTS-2. Point it at a voice sample, type your words, and let The Yakkinator do the talking.
+> A retro-futuristic Text-to-Speech studio powered by IndexTTS-2, Echo-TTS and Indic-Speak. Point it at a voice sample (or describe a brand-new voice), type your words, and let The Yakkinator do the talking.
 
 ---
 
@@ -18,7 +18,7 @@
 
 ## Quick Start ⚡
 
-**One-click setup!** Just double-click `TheYakkinator.exe` and you're off to the races.
+**One-click setup!** Extract the zip, double-click `Yakkinator.exe` and you're off to the races. Extra engines and voice designers are optional and install from the **Setup** page.
 
 > **💾 Heads up:** The first run downloads ~16GB of model files to your `%LOCALAPPDATA%` folder. It's a one-time download — future launches are instant! Coffee break recommended on first run. ☕
 
@@ -65,7 +65,7 @@ Download the model files from Hugging Face:
 Place the downloaded files in a folder called `checkpoints` next to the app:
 ```
 TheYakkinator/
-├── TheYakkinator.exe
+├── Yakkinator.exe
 ├── checkpoints/
 │   ├── config.yaml
 │   └── ... (model files)
@@ -90,7 +90,8 @@ The Android app is a remote control for the Yakkinator on your PC. You type and 
 
 What you can do from the phone:
 - Use any voice in the PC's library, pick an audio file on the phone, or record a new sample with the mic. New samples can be saved to the PC's library.
-- Switch between IndexTTS-2 and Echo-TTS. The PC loads whichever engine you choose.
+- Switch between IndexTTS-2, Echo-TTS and Indic-Speak (app 1.1.0 or later). The PC loads whichever engine you choose. For Indic-Speak, pick its language, speaker and style on the phone.
+- Use voices you designed on the PC: they're in the library like any other voice.
 - Use emotion sliders, emotion-from-text and emotion-from-audio, plus the advanced sampling settings.
 - Play, share and delete your generated clips. They're also saved to the PC's History.
 
@@ -107,13 +108,13 @@ The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Signe
 
 ## Choosing an Engine 🎛️
 
-Use the **Engine** menu at the top of the Generate page to switch between:
+Click one of the **engine buttons** at the top of the Generate page to switch. The selected engine is highlighted with a check mark, and each button shows whether that engine is installed or loaded:
 
 - **IndexTTS-2** (default): voice cloning with emotion control (reference audio, sliders, or inferred from text).
 - **Indic-Speak**: [bodhan-ai/indic-speak](https://huggingface.co/bodhan-ai/indic-speak), built for 22 Indian languages plus Indian English, with 95 built-in voices. Pick a **language** and **speaker** instead of a voice sample (it can't clone voices). Mixed text like Hinglish, numbers and formulas stays in one voice. An optional **style** can be an emotion label (`ANGER`, `FEAR`) or a short description; style control is still preview quality. Install it from the **Setup** page (PyTorch ~2.5 GB + model ~6.6 GB, NVIDIA GPU with ~10 GB VRAM recommended). The model is gated: accept its license on Hugging Face, create a Read token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens), and paste it into Setup. The token is used for that download only and isn't saved. Weights are under the Indic Open Model License.
 - **Echo-TTS**: a fast C++ engine ([echo-tts-cpp](https://github.com/Cirius0310/echo-tts-cpp)) that clones the voice sample directly. Install it once from the **Setup** page (portable runtime ~1.7 GB + Q8 model ~5 GB, NVIDIA GPU required). Its model weights and outputs are CC-BY-NC-SA 4.0, so non-commercial use only.
 
-Only one engine is loaded at a time, so switching frees the others' GPU memory. Indic-Speak starts loading as soon as you pick it, and long texts are generated sentence by sentence. Echo-TTS loads on your first generation, and reloads when you use a new voice or change its parameters.
+Only one engine is loaded at a time, so switching frees the others' GPU memory. You can't switch while a generation is running. Indic-Speak starts loading as soon as you pick it, and long texts are generated sentence by sentence. Echo-TTS loads on your first generation, and reloads when you use a new voice or change its parameters.
 
 ---
 
@@ -136,12 +137,22 @@ Each also installs PyTorch (~2.5 GB) in its own environment and needs an NVIDIA 
 
 The saved clip *is* the voice: designing again from the same description gives a different one. Only one designer is loaded at a time. Starting one unloads the speech engine, and generating speech (or **Unload Designer**) frees it again. Anything Echo-TTS speaks with a designed voice is still CC-BY-NC-SA 4.0 (non-commercial).
 
+---
+
+## The Setup Page 🧰
+
+The **Setup** page installs each engine and voice designer into its own environment under `%LOCALAPPDATA%\IndexTTSStudio`. Anything that still needs setup is listed at the top and opened, with its **Install** button; installed engines are collapsed underneath with an **Installed** badge (expand one to reinstall it). Progress and errors show at the top of the page, and the full output is in the **Setup Log** at the bottom.
+
+---
+
 ## Running The Yakkinator 🚀
 
-1. **Double-click** `TheYakkinator.exe` — sit back, relax, maybe grab a snack
+1. **Double-click** `Yakkinator.exe` — sit back, relax, maybe grab a snack
 2. **Watch the magic** — the app auto-starts the Python backend (first run takes a few minutes)
-3. **Pick a voice** — drop in any WAV/MP3 file to clone its style
+3. **Pick a voice** — drop in any WAV/MP3 file to clone its style, or design one on the **Voice Library** page
 4. **Type & Create** — enter your text and hit Generate. Let the yakking begin!
+
+**Building from source:** run `publish.bat`, or build `src/IndexTTSStudio` in Visual Studio or with `dotnet build`. A Yakkinator running from the output folder is closed automatically first, so its locked files don't stop the build.
 
 ---
 
@@ -153,6 +164,9 @@ The saved clip *is* the voice: designing again from the same description gives a
 | `indextts not found` | Run `pip install indextts` in terminal |
 | Slow generation | Enable GPU — install CUDA and the matching torch version |
 | Model not found | Ensure `checkpoints/config.yaml` exists next to the .exe |
+| Voice designer runs out of GPU memory | Close other GPU apps; designing already unloads the speech engine. MOSS decodes on the CPU (slower) when less than ~9 GB is free |
+| Designed accent sounds American | Switch designer: MOSS for Irish, VoxCPM2 for Scottish. Seeds vary, so design a few candidates |
+| Can't see the Install button on Setup | Engines still needing setup are listed first; scroll the page or collapse installed engines |
 
 ---
 
