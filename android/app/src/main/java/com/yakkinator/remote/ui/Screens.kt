@@ -78,6 +78,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -367,12 +368,12 @@ fun GenerateScreen(vm: YakViewModel, onOpenConnect: () -> Unit) {
                     onClick = { vm.selectEngine(e.id) },
                     enabled = e.installed && !vm.generating,
                     shape = SegmentedButtonDefaults.itemShape(i, engines.size),
-                ) { Text(e.name) }
+                ) { Text(e.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = if (engines.size > 2) 12.sp else 14.sp) }
             }
         }
         if (connected != null && connected.info.engine != vm.engine) {
             Text(
-                "The PC is using the other engine; it will switch (and load the model) when you generate.",
+                "The PC is using a different engine; it will switch (and load the model) when you generate.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
@@ -381,6 +382,9 @@ fun GenerateScreen(vm: YakViewModel, onOpenConnect: () -> Unit) {
 
         // Voice
         SectionLabel("Voice")
+        if (vm.isIndic) {
+            IndicVoicePicker(vm, connected != null)
+        } else {
         var voiceMenu by remember { mutableStateOf(false) }
         val voiceLabel = when (val v = vm.voice) {
             is VoiceSource.Library -> v.name
@@ -447,6 +451,7 @@ fun GenerateScreen(vm: YakViewModel, onOpenConnect: () -> Unit) {
                 )
             }
         }
+        }
 
         // Text
         SectionLabel("Text")
@@ -491,7 +496,7 @@ fun GenerateScreen(vm: YakViewModel, onOpenConnect: () -> Unit) {
                     }
                 }
             }
-        } else {
+        } else if (!vm.isIndic) {
             Text(
                 "Echo-TTS takes its delivery from the voice sample; emotion controls are IndexTTS-2 only.",
                 fontSize = 12.sp,
@@ -519,6 +524,19 @@ fun GenerateScreen(vm: YakViewModel, onOpenConnect: () -> Unit) {
                     LabeledSlider("Top P", vm.topP, { vm.topP = it }, 0.1f..1f)
                     LabeledSlider("Top K", vm.topK.toFloat(), { vm.topK = it.roundToInt() }, 1f..100f, format = int)
                     LabeledSlider("Max tokens", vm.maxTokens.toFloat(), { vm.maxTokens = it.roundToInt() }, 20f..300f, format = int)
+                } else if (vm.isIndic) {
+                    LabeledSlider("Temperature", vm.indicTemperature, { vm.indicTemperature = it }, 0.05f..2f)
+                    LabeledSlider("Top P", vm.indicTopP, { vm.indicTopP = it }, 0.05f..1f)
+                    LabeledSlider("Top K", vm.indicTopK.toFloat(), { vm.indicTopK = it.roundToInt() }, 1f..200f, format = int)
+                    OutlinedTextField(
+                        value = vm.indicSeed,
+                        onValueChange = { s -> if (s.isEmpty() || s.toIntOrNull() != null) vm.indicSeed = s },
+                        label = { Text("Seed") },
+                        placeholder = { Text("Random") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 } else {
                     Text("Changing these makes the PC reload Echo-TTS.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     LabeledSlider("Steps", vm.echoSteps.toFloat(), { vm.echoSteps = it.roundToInt() }, 10f..80f, format = int)
@@ -593,6 +611,113 @@ fun GenerateScreen(vm: YakViewModel, onOpenConnect: () -> Unit) {
             showRecorder = false
         })
     }
+}
+
+/** Indic-Speak can't clone a sample: pick a language, one of its trained speakers, and optionally a style. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IndicVoicePicker(vm: YakViewModel, connected: Boolean) {
+    val langs = vm.indicVoices.languages
+    if (langs.isEmpty()) {
+        Text(
+            if (connected) "Couldn't load Indic-Speak's voices from the PC. Update Yakkinator on the PC, then tap refresh."
+            else "Connect to the PC to see Indic-Speak's voices.",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    var langMenu by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = langMenu, onExpandedChange = { langMenu = it }) {
+        OutlinedTextField(
+            value = vm.indicLanguage?.displayName ?: "",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Language") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(langMenu) },
+            singleLine = true,
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = langMenu, onDismissRequest = { langMenu = false }) {
+            langs.forEach { l ->
+                DropdownMenuItem(
+                    text = { Text(l.displayName) },
+                    onClick = {
+                        vm.selectIndicLanguage(l)
+                        langMenu = false
+                    },
+                )
+            }
+        }
+    }
+
+    Spacer(Modifier.height(8.dp))
+    var speakerMenu by remember { mutableStateOf(false) }
+    val speakers = vm.indicLanguage?.speakers.orEmpty()
+    ExposedDropdownMenuBox(expanded = speakerMenu, onExpandedChange = { speakerMenu = it && speakers.isNotEmpty() }) {
+        OutlinedTextField(
+            value = vm.indicSpeaker ?: "",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Speaker") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(speakerMenu) },
+            singleLine = true,
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = speakerMenu, onDismissRequest = { speakerMenu = false }) {
+            speakers.forEach { name ->
+                DropdownMenuItem(
+                    text = { Text(name) },
+                    onClick = {
+                        vm.selectIndicSpeaker(name)
+                        speakerMenu = false
+                    },
+                )
+            }
+        }
+    }
+
+    Spacer(Modifier.height(8.dp))
+    var styleMenu by remember { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
+    val styles = vm.indicVoices.styles
+    ExposedDropdownMenuBox(expanded = styleMenu, onExpandedChange = { styleMenu = it && styles.isNotEmpty() }) {
+        OutlinedTextField(
+            value = vm.indicStyle,
+            onValueChange = vm::updateIndicStyle,
+            label = { Text("Style (optional)") },
+            placeholder = { Text("e.g. calm, like a teacher explaining") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(styleMenu) },
+            singleLine = true,
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = styleMenu, onDismissRequest = { styleMenu = false }) {
+            styles.forEach { style ->
+                DropdownMenuItem(
+                    text = { Text(style) },
+                    onClick = {
+                        vm.updateIndicStyle(style)
+                        styleMenu = false
+                        focus.clearFocus()
+                    },
+                )
+            }
+        }
+    }
+    Text(
+        if (vm.indicLanguage?.code == "en") "Indian-accented English. Indic words in their own script are read naturally too."
+        else "Type in ${vm.indicLanguage?.name ?: "the language's"} script. English words and numbers mixed in are read in the same voice.",
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
+    )
 }
 
 @Composable
@@ -679,7 +804,11 @@ private fun HistoryRow(vm: YakViewModel, item: com.yakkinator.remote.data.Histor
                 Text(
                     listOf(
                         item.voice,
-                        if (item.engine == "echo") "Echo-TTS" else "IndexTTS-2",
+                        when (item.engine) {
+                            "echo" -> "Echo-TTS"
+                            "indic" -> "Indic-Speak"
+                            else -> "IndexTTS-2"
+                        },
                         DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.created)),
                     ).filter { it.isNotBlank() }.joinToString(" · "),
                     fontSize = 12.sp,

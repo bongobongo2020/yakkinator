@@ -48,6 +48,24 @@ data class Voice(
     val emotionVector: List<Float>,
 )
 
+/** A language in Indic-Speak's built-in voice library and the speakers trained on it. */
+data class IndicLanguage(val code: String, val name: String, val preview: Boolean, val speakers: List<String>) {
+    val displayName get() = if (preview) "$name (preview)" else name
+}
+
+data class IndicVoices(val languages: List<IndicLanguage>, val styles: List<String>)
+
+/** Indic-Speak has no cloning: it takes one of its trained speakers plus an optional style. */
+data class IndicParams(
+    val speaker: String,
+    val style: String,
+    val temperature: Float,
+    val topP: Float,
+    val topK: Int,
+    /** Null = random. */
+    val seed: Int?,
+)
+
 /** A voice sample on the phone (picked file or recording). */
 data class LocalAudio(val uri: Uri, val displayName: String)
 
@@ -59,7 +77,9 @@ sealed interface VoiceSource {
 data class GenerateParams(
     val engine: String,
     val text: String,
-    val voice: VoiceSource,
+    /** Null for Indic-Speak, which uses [indic] instead. */
+    val voice: VoiceSource?,
+    val indic: IndicParams? = null,
     val emotionMode: String,
     val emotionAlpha: Float,
     val emotionVector: List<Float>,
@@ -135,11 +155,46 @@ class YakApi(baseUrl: String, private val token: String) {
         }
     }
 
+    suspend fun indicVoices(): IndicVoices {
+        val json = JSONObject(fetchText(quick, request("indic/voices").build()))
+        val langs = json.getJSONArray("languages")
+        val styles = json.optJSONArray("styles")
+        return IndicVoices(
+            languages = (0 until langs.length()).map { i ->
+                val l = langs.getJSONObject(i)
+                val spk = l.getJSONArray("speakers")
+                IndicLanguage(
+                    code = l.getString("code"),
+                    name = l.getString("name"),
+                    preview = l.optBoolean("preview"),
+                    speakers = (0 until spk.length()).map { spk.getString(it) },
+                )
+            },
+            styles = (0 until (styles?.length() ?: 0)).map { styles!!.getString(it) },
+        )
+    }
+
     /** Generates speech and writes the WAV to [dest]. Returns the PC's job id. */
     suspend fun generate(params: GenerateParams, resolver: ContentResolver, dest: File): String {
         val form = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("engine", params.engine)
             .addFormDataPart("text", params.text)
+        val indic = params.indic
+        if (indic != null) {
+            form.addFormDataPart("speaker", indic.speaker)
+                .addFormDataPart("style", indic.style)
+                .addFormDataPart("temperature", indic.temperature.fmt())
+                .addFormDataPart("top_p", indic.topP.fmt())
+                .addFormDataPart("top_k", indic.topK.toString())
+            indic.seed?.let { form.addFormDataPart("seed", it.toString()) }
+        } else {
+            addCloningFields(form, params, resolver)
+        }
+        return receive(form, dest)
+    }
+
+    private suspend fun addCloningFields(form: MultipartBody.Builder, params: GenerateParams, resolver: ContentResolver) {
+        form
             .addFormDataPart("emotion_mode", params.emotionMode)
             .addFormDataPart("emotion_alpha", params.emotionAlpha.fmt())
             .addFormDataPart("emotion_vector", params.emotionVector.joinToString(",") { it.fmt() })
@@ -153,6 +208,7 @@ class YakApi(baseUrl: String, private val token: String) {
             .addFormDataPart("echo_seed", params.echoSeed.toString())
 
         when (val voice = params.voice) {
+            null -> throw ApiException("Pick a voice")
             is VoiceSource.Library -> form.addFormDataPart("voice_name", voice.name)
             is VoiceSource.Local -> {
                 addAudio(form, "voice", voice.audio, resolver)
@@ -163,7 +219,9 @@ class YakApi(baseUrl: String, private val token: String) {
             val emo = params.emotionAudio ?: throw ApiException("Pick an emotion reference sample")
             addAudio(form, "emotion_audio", emo, resolver)
         }
+    }
 
+    private suspend fun receive(form: MultipartBody.Builder, dest: File): String {
         val response = execute(slow, request("generate").post(form.build()).build())
         return response.use { resp ->
             if (!resp.isSuccessful) throw errorFrom(resp)

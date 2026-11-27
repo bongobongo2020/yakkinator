@@ -15,6 +15,9 @@ import com.yakkinator.remote.data.ApiException
 import com.yakkinator.remote.data.GenerateParams
 import com.yakkinator.remote.data.HistoryItem
 import com.yakkinator.remote.data.HistoryStore
+import com.yakkinator.remote.data.IndicLanguage
+import com.yakkinator.remote.data.IndicParams
+import com.yakkinator.remote.data.IndicVoices
 import com.yakkinator.remote.data.LocalAudio
 import com.yakkinator.remote.data.Prefs
 import com.yakkinator.remote.data.ServerInfo
@@ -51,6 +54,9 @@ class YakViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var voices by mutableStateOf<List<Voice>>(emptyList())
         private set
+    /** Indic-Speak's built-in voice library; empty if the PC's Yakkinator predates Indic-Speak. */
+    var indicVoices by mutableStateOf(IndicVoices(emptyList(), emptyList()))
+        private set
 
     // Generate form
     var engine by mutableStateOf(prefs.engine)
@@ -74,6 +80,19 @@ class YakViewModel(app: Application) : AndroidViewModel(app) {
     var echoCfgText by mutableFloatStateOf(3.0f)
     var echoCfgSpeaker by mutableFloatStateOf(8.0f)
     var echoSeed by mutableIntStateOf(0)
+
+    // Indic-Speak: a language, one of its trained speakers, and an optional style (model card defaults)
+    var indicLanguage by mutableStateOf<IndicLanguage?>(null)
+        private set
+    var indicSpeaker by mutableStateOf<String?>(null)
+        private set
+    var indicStyle by mutableStateOf(prefs.indicStyle)
+        private set
+    var indicTemperature by mutableFloatStateOf(0.6f)
+    var indicTopP by mutableFloatStateOf(0.9f)
+    var indicTopK by mutableIntStateOf(50)
+    /** Empty = random. */
+    var indicSeed by mutableStateOf("")
 
     // Generation state
     var generating by mutableStateOf(false)
@@ -140,6 +159,9 @@ class YakViewModel(app: Application) : AndroidViewModel(app) {
                 val api = api()
                 val info = api.info()
                 voices = api.voices()
+                if (info.engines.any { it.id == "indic" }) {
+                    runCatching { api.indicVoices() }.getOrNull()?.let { applyIndicVoices(it) }
+                }
                 if (voice == null) {
                     voices.firstOrNull { it.name == prefs.lastVoice }?.let { selectLibraryVoice(it) }
                 }
@@ -159,6 +181,31 @@ class YakViewModel(app: Application) : AndroidViewModel(app) {
     fun selectEngine(id: String) {
         engine = id
         prefs.engine = id
+    }
+
+    private fun applyIndicVoices(v: IndicVoices) {
+        indicVoices = v
+        val lang = v.languages.firstOrNull { it.code == (indicLanguage?.code ?: prefs.indicLanguage) }
+            ?: v.languages.firstOrNull()
+        lang?.let { selectIndicLanguage(it) }
+    }
+
+    fun selectIndicLanguage(lang: IndicLanguage) {
+        indicLanguage = lang
+        prefs.indicLanguage = lang.code
+        // Keep the speaker if they also speak this language, else the remembered one, else the first
+        val keep = listOf(indicSpeaker, prefs.indicSpeaker).firstOrNull { it != null && it in lang.speakers }
+        selectIndicSpeaker(keep ?: lang.speakers.firstOrNull() ?: return)
+    }
+
+    fun selectIndicSpeaker(name: String) {
+        indicSpeaker = name
+        prefs.indicSpeaker = name
+    }
+
+    fun updateIndicStyle(value: String) {
+        indicStyle = value
+        prefs.indicStyle = value
     }
 
     fun updateText(value: String) {
@@ -223,13 +270,25 @@ class YakViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     val canGenerate: Boolean
-        get() = !generating && connection is ConnectionState.Connected && text.isNotBlank() && voice != null &&
+        get() = !generating && connection is ConnectionState.Connected && text.isNotBlank() &&
+            (if (isIndic) indicSpeaker != null else voice != null) &&
             !(isIndexTts && emotionMode == "audio" && emotionAudio == null)
 
     val isIndexTts get() = engine == "indextts"
+    val isIndic get() = engine == "indic"
 
     fun generate() {
-        val v = voice ?: return
+        val indic = if (isIndic) {
+            IndicParams(
+                speaker = indicSpeaker ?: return,
+                style = indicStyle.trim(),
+                temperature = indicTemperature,
+                topP = indicTopP,
+                topK = indicTopK,
+                seed = indicSeed.trim().toIntOrNull(),
+            )
+        } else null
+        val v = if (indic == null) voice ?: return else null
         error = null
         generating = true
         elapsedSeconds = 0
@@ -250,6 +309,7 @@ class YakViewModel(app: Application) : AndroidViewModel(app) {
                         engine = engine,
                         text = text.trim(),
                         voice = v,
+                        indic = indic,
                         emotionMode = mode,
                         emotionAlpha = emotionAlpha,
                         emotionVector = emotionVector.toList(),
@@ -269,6 +329,7 @@ class YakViewModel(app: Application) : AndroidViewModel(app) {
                 val voiceLabel = when (v) {
                     is VoiceSource.Library -> v.name
                     is VoiceSource.Local -> v.audio.displayName
+                    null -> listOfNotNull(indic?.speaker, indicLanguage?.name).joinToString(", ")
                 }
                 val item = history.record(dest, text.trim(), voiceLabel, engine)
                 lastOutput = item

@@ -24,4 +24,16 @@ class Prefs(context: Context) {
     var text: String
         get() = sp.getString("text", "") ?: ""
         set(value) = sp.edit().putString("text", value).apply()
+
+    var indicLanguage: String
+        get() = sp.getString("indic_language", "") ?: ""
+        set(value) = sp.edit().putString("indic_language", value).apply()
+
+    var indicSpeaker: String
+        get() = sp.getString("indic_speaker", "") ?: ""
+        set(value) = sp.edit().putString("indic_speaker", value).apply()
+
+    var indicStyle: String
+        get() = sp.getString("indic_style", "") ?: ""
+        set(value) = sp.edit().putString("indic_style", value).apply()
 }
