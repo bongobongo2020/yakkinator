@@ -12,7 +12,7 @@
 
 ## Download 💾
 
-**[Get TheYakkinator-v1.2.0-win-x64.zip](https://github.com/bongobongo2020/yakkinator/releases/download/v1.2.0/TheYakkinator-v1.2.0-win-x64.zip)**
+**[Get TheYakkinator-v1.3.0-win-x64.zip](https://github.com/bongobongo2020/yakkinator/releases/download/v1.3.0/TheYakkinator-v1.3.0-win-x64.zip)**
 
 ---
 
@@ -116,6 +116,17 @@ Use the **Engine** menu at the top of the Generate page to switch between:
 Only one engine is loaded at a time, so switching frees the others' GPU memory. Indic-Speak starts loading as soon as you pick it, and long texts are generated sentence by sentence. Echo-TTS loads on your first generation, and reloads when you use a new voice or change its parameters.
 
 ---
+
+## Designing Original Voices 🎨
+
+Don't have a voice sample? Describe one. The **Voice Library** page has a **Design a voice** panel powered by [Qwen3-TTS VoiceDesign](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign) (Apache-2.0):
+
+1. Install the **Voice Designer** once from the **Setup** page (PyTorch ~2.5 GB + model ~4.5 GB, NVIDIA GPU with ~6 GB free VRAM).
+2. Describe the voice (age, gender, accent, timbre, pace, mood), e.g. *"A raspy middle-aged man with a warm, unhurried baritone and a calm delivery"*, and edit the sample script it will read (~10 to 15 s of neutral speech makes the best reference).
+3. Click **Design Voices** to get up to four candidates, listen, and **save** the one you like to the library.
+4. Pick it on the **Generate** page with Echo-TTS or IndexTTS-2 like any other voice sample.
+
+The saved clip *is* the voice: designing again from the same description gives a different one. The designer only loads while you design. Starting it unloads the speech engine, and generating speech (or **Unload Designer**) frees it again. English, Chinese, French, German, Italian, Japanese, Korean, Portuguese, Russian and Spanish are supported. Anything Echo-TTS speaks with a designed voice is still CC-BY-NC-SA 4.0 (non-commercial).
 
 ## Running The Yakkinator 🚀
 
