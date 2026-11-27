@@ -2,9 +2,10 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      ScrollViewer.CanContentScroll="True"
       Title="Settings">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <ScrollViewer CanContentScroll="False" VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="8,4,8,4" MaxWidth="520" HorizontalAlignment="Left">
         <TextBlock Text="Settings" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
 

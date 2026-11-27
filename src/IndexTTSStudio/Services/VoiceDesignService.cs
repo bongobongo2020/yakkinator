@@ -5,28 +5,31 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using IndexTTSStudio.Helpers;
+using IndexTTSStudio.Models;
 
 namespace IndexTTSStudio.Services;
 
 /// <summary>One designed candidate voice: the clip on disk and the seed that produced it.</summary>
-public record VoiceDesignCandidate(string FilePath, long Seed, string Description, string Transcript, string Language)
+public record VoiceDesignCandidate(string FilePath, long Seed, string Description, string Transcript, string Language,
+    VoiceDesignerInfo Designer)
 {
-    public string Label => $"Seed {Seed}";
+    public string Label => $"{Designer.Name} · seed {Seed}";
 }
 
 /// <summary>
-/// Runs python/voicedesign_server.py (Qwen3-TTS VoiceDesign) from its own venv. It creates an
-/// original voice from a text description; the clip the user picks goes into the voice library,
-/// where Echo-TTS and IndexTTS-2 clone it. It only loads while the user is designing: the caller
-/// unloads the speech engines first, and generating speech stops it again.
+/// Runs python/voicedesign_server.py for one designer model at a time (Qwen3-TTS, MOSS or VoxCPM2),
+/// each from its own venv. It creates an original voice from a text description; the clip the user
+/// picks goes into the voice library, where Echo-TTS and IndexTTS-2 clone it. It only loads while
+/// the user is designing: the caller unloads the speech engines first, and generating speech stops
+/// it again. Picking another designer model restarts it with that model.
 /// </summary>
 public class VoiceDesignService : IDisposable
 {
-    public const string ModelName = "Qwen3-TTS-12Hz-1.7B-VoiceDesign";
     private const int MaxLogChars = 2_000_000;
     private const int MaxCandidateFiles = 24;
 
-    private readonly int _port;
+    private readonly int _basePort;
+    private VoiceDesignerInfo? _current;
     private readonly HttpClient _probe = new() { Timeout = TimeSpan.FromSeconds(5) };
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(10) };
     private readonly SemaphoreSlim _startGate = new(1, 1);
@@ -41,23 +44,20 @@ public class VoiceDesignService : IDisposable
 
     public bool IsRunning => _process is { HasExited: false };
     public bool IsReady { get; private set; }
+    /// <summary>The designer model the running server has loaded (null when stopped).</summary>
+    public VoiceDesignerInfo? LoadedDesigner => IsRunning ? _current : null;
     public string FullLog { get { lock (_logLock) return _fullLog.ToString(); } }
 
-    private string BaseUrl => $"http://127.0.0.1:{_port}";
+    private string BaseUrl => $"http://127.0.0.1:{_basePort + (_current?.PortOffset ?? 0)}";
 
-    /// <summary>Languages the model accepts ("Auto" lets it pick from the text).</summary>
+    /// <summary>Languages Qwen3-TTS accepts ("Auto" lets it pick from the text); the others infer it.</summary>
     public static IReadOnlyList<string> Languages { get; } =
         ["Auto", "English", "Chinese", "French", "German", "Italian", "Japanese", "Korean", "Portuguese", "Russian", "Spanish"];
 
     public VoiceDesignService(SettingsService settingsService)
     {
-        _port = settingsService.Settings.VoiceDesignApiPort;
+        _basePort = settingsService.Settings.VoiceDesignApiPort;
     }
-
-    public static bool IsInstalled =>
-        File.Exists(PathHelper.VoiceDesignPython) &&
-        File.Exists(Path.Combine(PathHelper.VoiceDesignModelDir, "model.safetensors")) &&
-        File.Exists(Path.Combine(PathHelper.VoiceDesignModelDir, "speech_tokenizer", "model.safetensors"));
 
     private void AppendLog(string prefix, string line)
     {
@@ -70,16 +70,16 @@ public class VoiceDesignService : IDisposable
     }
 
     /// <summary>Designs one candidate. Pass <paramref name="seed"/> to reproduce an earlier one.</summary>
-    public async Task<VoiceDesignCandidate> DesignAsync(string description, string transcript, string language,
-        long? seed = null, Action<string>? onStatus = null, CancellationToken ct = default)
+    public async Task<VoiceDesignCandidate> DesignAsync(VoiceDesignerInfo designer, string description, string transcript,
+        string language, long? seed = null, Action<string>? onStatus = null, CancellationToken ct = default)
     {
-        await EnsureStartedAsync(onStatus, ct).ConfigureAwait(false);
+        await EnsureStartedAsync(designer, onStatus, ct).ConfigureAwait(false);
 
         using var response = await _http.PostAsJsonAsync($"{BaseUrl}/api/design", new
         {
             text = transcript,
             instruct = description,
-            language = string.IsNullOrWhiteSpace(language) ? "Auto" : language,
+            language = !designer.UsesLanguage || string.IsNullOrWhiteSpace(language) ? "Auto" : language,
             seed,
         }, ct).ConfigureAwait(false);
 
@@ -97,7 +97,8 @@ public class VoiceDesignService : IDisposable
         var path = Path.Combine(PathHelper.VoiceDesignCandidatesDir, $"candidate_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{usedSeed}.wav");
         await File.WriteAllBytesAsync(path, audio, ct).ConfigureAwait(false);
         PruneCandidates();
-        return new VoiceDesignCandidate(path, usedSeed, description, transcript, language);
+        return new VoiceDesignCandidate(path, usedSeed, description, transcript,
+            designer.UsesLanguage ? language : "Auto", designer);
     }
 
     private static void PruneCandidates()
@@ -125,18 +126,25 @@ public class VoiceDesignService : IDisposable
         return string.IsNullOrWhiteSpace(body) ? "The voice designer failed" : body;
     }
 
-    private async Task EnsureStartedAsync(Action<string>? onStatus, CancellationToken ct)
+    private async Task EnsureStartedAsync(VoiceDesignerInfo designer, Action<string>? onStatus, CancellationToken ct)
     {
-        if (IsReady && IsRunning) return;
+        if (IsReady && IsRunning && _current?.Id == designer.Id) return;
 
         await _startGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (IsReady && IsRunning) return;
-            if (!IsInstalled)
-                throw new InvalidOperationException("The voice designer isn't installed. Install it from the Setup page.");
+            if (IsReady && IsRunning && _current?.Id == designer.Id) return;
+            if (!designer.IsInstalled)
+                throw new InvalidOperationException($"{designer.Name} isn't installed. Install it from the Setup page.");
 
-            onStatus?.Invoke("Loading the voice designer (first load takes a minute)...");
+            // One designer at a time: switching models frees the previous one's GPU memory first
+            if (_process != null)
+            {
+                onStatus?.Invoke($"Unloading {_current?.Name ?? "the previous designer"}...");
+                await StopProcessAsync().ConfigureAwait(false);
+            }
+            _current = designer;
+            onStatus?.Invoke($"Loading {designer.Name} (first load takes a minute)...");
             _startCts = new CancellationTokenSource();
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _startCts.Token);
             await StartAsync(linked.Token).ConfigureAwait(false);
@@ -153,17 +161,25 @@ public class VoiceDesignService : IDisposable
     {
         await ShutdownStaleServerAsync(ct).ConfigureAwait(false);
 
+        var designer = _current!;
         var psi = new ProcessStartInfo
         {
-            FileName = PathHelper.VoiceDesignPython,
-            WorkingDirectory = PathHelper.VoiceDesignDir,
+            FileName = designer.Python,
+            WorkingDirectory = designer.WorkDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        foreach (var a in new[] { PathHelper.VoiceDesignServerScript, "--port", _port.ToString(), "--model-dir", PathHelper.VoiceDesignModelDir })
+        var port = _basePort + designer.PortOffset;
+        foreach (var a in new[] { PathHelper.VoiceDesignServerScript, "--engine", designer.EngineArg,
+                     "--port", port.ToString(), "--model-dir", designer.ModelDir })
             psi.ArgumentList.Add(a);
+        if (designer.CodecDir != null)
+        {
+            psi.ArgumentList.Add("--codec-dir");
+            psi.ArgumentList.Add(designer.CodecDir);
+        }
         psi.Environment["PYTHONUTF8"] = "1";
         // Everything is in the local model folder; don't let transformers phone home on every load
         psi.Environment["HF_HUB_OFFLINE"] = "1";
@@ -261,7 +277,11 @@ public class VoiceDesignService : IDisposable
     public async Task StopAsync()
     {
         try { _startCts?.Cancel(); } catch (ObjectDisposedException) { }
+        await StopProcessAsync().ConfigureAwait(false);
+    }
 
+    private async Task StopProcessAsync()
+    {
         var process = _process;
         _process = null;
         var wasReady = IsReady;

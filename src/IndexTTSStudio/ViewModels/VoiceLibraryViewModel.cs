@@ -53,6 +53,17 @@ public partial class VoiceLibraryViewModel : ObservableObject
 
     public ObservableCollection<VoiceDesignCandidate> Candidates { get; } = [];
     public IReadOnlyList<string> DesignLanguages => VoiceDesignService.Languages;
+
+    /// <summary>Installed designer models for the picker (Qwen, MOSS, VoxCPM2).</summary>
+    [ObservableProperty] private List<VoiceDesignerInfo> _designers = [];
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowLanguage), nameof(DesignerTagline))]
+    private VoiceDesignerInfo? _selectedDesigner;
+    /// <summary>Only Qwen3-TTS takes a language; MOSS and VoxCPM2 infer it from the text.</summary>
+    public bool ShowLanguage => SelectedDesigner?.UsesLanguage ?? false;
+    public string DesignerTagline => SelectedDesigner?.Tagline ?? "";
+    /// <summary>Points to the accent designers on the Setup page while they aren't installed.</summary>
+    [ObservableProperty] private string _missingDesignersHint = "";
     public IReadOnlyList<int> CandidateCounts { get; } = [1, 2, 3, 4];
 
     /// <summary>Starting points; the more specific the description, the closer the result.</summary>
@@ -63,6 +74,9 @@ public partial class VoiceLibraryViewModel : ObservableObject
         "An elderly British gentleman, soft and slightly gravelly, speaking slowly like a storyteller by the fire.",
         "A confident female news anchor in her forties, crisp diction, neutral accent, steady pace.",
         "A nervous teenage boy, voice slightly cracking, talking quickly and a little breathlessly.",
+        "A young woman with a thick Irish accent from Cork, cheerful and lively, with a musical lilt. (MOSS)",
+        "A middle-aged man with a strong Scottish accent from Glasgow, gruff but warm, steady pace. (VoxCPM2)",
+        "An older woman with a broad Scottish accent from Edinburgh, calm and kind, speaking slowly. (VoxCPM2)",
     ];
 
     public VoiceLibraryViewModel(VoiceLibraryService voiceLibrary, AudioPlayerService audioPlayer,
@@ -81,16 +95,36 @@ public partial class VoiceLibraryViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(settings.VoiceDesignDescription)) _designDescription = settings.VoiceDesignDescription;
         if (!string.IsNullOrWhiteSpace(settings.VoiceDesignScript)) _designScript = settings.VoiceDesignScript;
         if (VoiceDesignService.Languages.Contains(settings.VoiceDesignLanguage)) _designLanguage = settings.VoiceDesignLanguage;
-        _isDesignerInstalled = setupService.IsVoiceDesignSetupComplete;
+        RefreshDesigners();
 
         _audioPlayer.OnPlaybackStopped += () =>
             App.Current.Dispatcher.Invoke(() => IsPlaying = false);
         _voiceLibrary.VoicesChanged += Refresh;
         _setupService.OnVoiceDesignSetupCompleted += () =>
-            App.Current.Dispatcher.BeginInvoke(() => IsDesignerInstalled = _setupService.IsVoiceDesignSetupComplete);
+            App.Current.Dispatcher.BeginInvoke(RefreshDesigners);
         _designer.StateChanged += () =>
             App.Current.Dispatcher.BeginInvoke(() => IsDesignerLoaded = _designer.IsReady);
         Refresh();
+    }
+
+    private void RefreshDesigners()
+    {
+        Designers = VoiceDesigners.All.Where(d => _setupService.IsDesignerSetupComplete(d.Id)).ToList();
+        IsDesignerInstalled = Designers.Count > 0;
+        var wanted = SelectedDesigner?.Id ?? _settingsService.Settings.VoiceDesigner;
+        SelectedDesigner = Designers.FirstOrDefault(d => d.Id == wanted) ?? Designers.FirstOrDefault();
+
+        var missing = new List<string>();
+        if (!_setupService.IsDesignerSetupComplete(VoiceDesigner.Moss)) missing.Add("MOSS for Irish accents");
+        if (!_setupService.IsDesignerSetupComplete(VoiceDesigner.VoxCpm)) missing.Add("VoxCPM2 for Scottish accents");
+        MissingDesignersHint = missing.Count == 0 ? "" : $"Install {string.Join(" and ", missing)} from the Setup page.";
+    }
+
+    partial void OnSelectedDesignerChanged(VoiceDesignerInfo? value)
+    {
+        if (value == null || _settingsService.Settings.VoiceDesigner == value.Id) return;
+        _settingsService.Settings.VoiceDesigner = value.Id;
+        try { _settingsService.Save(); } catch { /* a remembered choice is a convenience */ }
     }
 
     [RelayCommand]
@@ -156,7 +190,16 @@ public partial class VoiceLibraryViewModel : ObservableObject
 
     partial void OnSelectedExampleChanged(string? value)
     {
-        if (!string.IsNullOrWhiteSpace(value)) DesignDescription = value;
+        if (string.IsNullOrWhiteSpace(value)) return;
+        // "(MOSS)"/"(VoxCPM2)" marks which designer does that accent best: switch to it when installed
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"\s*\((MOSS|VoxCPM2)\)$");
+        if (match.Success)
+        {
+            var id = match.Groups[1].Value == "MOSS" ? VoiceDesigner.Moss : VoiceDesigner.VoxCpm;
+            if (Designers.FirstOrDefault(d => d.Id == id) is { } designer) SelectedDesigner = designer;
+            value = value[..match.Index];
+        }
+        DesignDescription = value;
     }
 
     private bool CanDesign() =>
@@ -166,6 +209,12 @@ public partial class VoiceLibraryViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanDesign))]
     private async Task DesignVoicesAsync()
     {
+        if (SelectedDesigner is not { } designerModel)
+        {
+            HasDesignError = true;
+            DesignStatus = "Install a voice designer from the Setup page first.";
+            return;
+        }
         if (_generateVm.IsGenerating)
         {
             HasDesignError = true;
@@ -200,7 +249,7 @@ public partial class VoiceLibraryViewModel : ObservableObject
             {
                 ct.ThrowIfCancellationRequested();
                 DesignStatus = $"Designing voice {i + 1} of {count}...";
-                var candidate = await _designer.DesignAsync(description, script, language,
+                var candidate = await _designer.DesignAsync(designerModel, description, script, language,
                     onStatus: s => App.Current.Dispatcher.BeginInvoke(() => DesignStatus = s), ct: ct);
                 Candidates.Insert(0, candidate);
                 while (Candidates.Count > 12) Candidates.RemoveAt(Candidates.Count - 1);
@@ -255,7 +304,7 @@ public partial class VoiceLibraryViewModel : ObservableObject
         {
             var name = NewVoiceName.Trim();
             _voiceLibrary.SaveVoice(name, c.FilePath,
-                design: new VoiceDesignInfo(c.Description, c.Transcript, c.Language, c.Seed, VoiceDesignService.ModelName));
+                design: new VoiceDesignInfo(c.Description, c.Transcript, c.Language, c.Seed, c.Designer.ModelName));
             HasDesignError = false;
             DesignStatus = $"Saved \"{name}\" to the library. Pick it on the Generate page with Echo-TTS or IndexTTS-2.";
             NewVoiceName = "";

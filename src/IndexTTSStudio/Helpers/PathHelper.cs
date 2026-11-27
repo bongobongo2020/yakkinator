@@ -41,6 +41,17 @@ public static class PathHelper
     /// <summary>Candidate clips from the designer, before one is saved to the library.</summary>
     public static string VoiceDesignCandidatesDir => Path.Combine(VoiceDesignDir, "candidates");
 
+    // MOSS-VoiceGenerator designer: own venv (transformers 5), model + its audio tokenizer
+    public static string MossDesignDir => Path.Combine(AppDataDir, "voice-design-moss");
+    public static string MossDesignPython => Path.Combine(MossDesignDir, ".venv", "Scripts", "python.exe");
+    public static string MossDesignModelDir => Path.Combine(MossDesignDir, "model");
+    public static string MossDesignCodecDir => Path.Combine(MossDesignDir, "audio-tokenizer");
+
+    // VoxCPM2 designer: own venv (voxcpm package)
+    public static string VoxCpmDesignDir => Path.Combine(AppDataDir, "voice-design-voxcpm");
+    public static string VoxCpmDesignPython => Path.Combine(VoxCpmDesignDir, ".venv", "Scripts", "python.exe");
+    public static string VoxCpmDesignModelDir => Path.Combine(VoxCpmDesignDir, "model");
+
     /// <summary>Path to the api_server.py bundled with the .NET app.</summary>
     public static string ApiServerScript => FindBundledScript("api_server.py");
 

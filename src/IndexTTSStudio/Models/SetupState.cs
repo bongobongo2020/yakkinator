@@ -14,6 +14,10 @@ public class SetupState
     public bool IndicModelDownloaded { get; set; }
     public bool VoiceDesignEnvInstalled { get; set; }
     public bool VoiceDesignModelDownloaded { get; set; }
+    public bool MossDesignEnvInstalled { get; set; }
+    public bool MossDesignModelDownloaded { get; set; }
+    public bool VoxCpmDesignEnvInstalled { get; set; }
+    public bool VoxCpmDesignModelDownloaded { get; set; }
     public string? ModelVersion { get; set; } = "IndexTTS-2";
     public DateTime? LastSetupDate { get; set; }
     public string? ErrorMessage { get; set; }

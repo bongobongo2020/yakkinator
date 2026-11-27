@@ -2,9 +2,10 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      ScrollViewer.CanContentScroll="True"
       Title="Voice Library">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <ScrollViewer CanContentScroll="False" VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="8,4,8,4" MaxWidth="640" HorizontalAlignment="Left">
 
         <!-- Voice designer -->
@@ -16,10 +17,19 @@
                 <!-- Not installed -->
                 <TextBlock TextWrapping="Wrap" FontSize="11"
                            Visibility="{Binding IsDesignerInstalled, Converter={StaticResource InverseBoolToVisConverter}}">
-                    <Run>Create an original voice by describing it, then save it here for Echo-TTS and IndexTTS-2 to clone. Install the voice designer (Qwen3-TTS VoiceDesign) from the Setup page first.</Run>
+                    <Run>Create an original voice by describing it, then save it here for Echo-TTS and IndexTTS-2 to clone. Install a voice designer from the Setup page first: Qwen3-TTS (all-round), MOSS (Irish accents) or VoxCPM2 (Scottish accents).</Run>
                 </TextBlock>
 
                 <StackPanel Visibility="{Binding IsDesignerInstalled, Converter={StaticResource BoolToVisConverter}}">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <TextBlock Text="Designer" VerticalAlignment="Center" FontSize="11" Margin="0,0,6,0" />
+                        <ComboBox ItemsSource="{Binding Designers}" SelectedItem="{Binding SelectedDesigner}"
+                                  DisplayMemberPath="Name" MinWidth="200"
+                                  IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding DesignerTagline}" FontSize="11" Foreground="{StaticResource RetroCyan}"
+                               TextWrapping="Wrap" Margin="0,0,0,2" />
+                    <TextBlock Text="{Binding MissingDesignersHint}" FontSize="10" Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,6" />
                     <TextBlock Text="Describe the voice: age, gender, accent, timbre, pace and mood. The more specific, the closer the result."
                                TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,0,0,4" />
                     <ui:TextBox Text="{Binding DesignDescription, UpdateSourceTrigger=PropertyChanged}"
@@ -47,10 +57,13 @@
                                 Margin="0,0,0,6" />
 
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <TextBlock Text="Language" VerticalAlignment="Center" FontSize="11" Margin="0,0,6,0" />
-                        <ComboBox ItemsSource="{Binding DesignLanguages}" SelectedItem="{Binding DesignLanguage}"
-                                  IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}"
-                                  MinWidth="120" Margin="0,0,12,0" />
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding ShowLanguage, Converter={StaticResource BoolToVisConverter}}">
+                            <TextBlock Text="Language" VerticalAlignment="Center" FontSize="11" Margin="0,0,6,0" />
+                            <ComboBox ItemsSource="{Binding DesignLanguages}" SelectedItem="{Binding DesignLanguage}"
+                                      IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}"
+                                      MinWidth="120" Margin="0,0,12,0" />
+                        </StackPanel>
                         <TextBlock Text="Candidates" VerticalAlignment="Center" FontSize="11" Margin="0,0,6,0" />
                         <ComboBox ItemsSource="{Binding CandidateCounts}" SelectedItem="{Binding CandidateCount}"
                                   IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}"

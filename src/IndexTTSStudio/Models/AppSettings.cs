@@ -18,6 +18,7 @@ public class AppSettings
     public string VoiceDesignDescription { get; set; } = "";
     public string VoiceDesignScript { get; set; } = "";
     public string VoiceDesignLanguage { get; set; } = "English";
+    public VoiceDesigner VoiceDesigner { get; set; } = VoiceDesigner.Qwen;
     public string ModelVersion { get; set; } = "IndexTTS-2";
     public bool AutoStartBackend { get; set; } = true;
     public string OutputDirectory { get; set; } = "";

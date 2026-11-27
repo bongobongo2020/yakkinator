@@ -20,12 +20,54 @@ public partial class GenerateViewModel : ObservableObject
     private readonly SettingsService _settingsService;
     private readonly SetupService _setupService;
 
-    public IReadOnlyList<TtsEngineOption> Engines { get; } =
+    /// <summary>The engine buttons at the top of the Generate page.</summary>
+    public IReadOnlyList<EngineChoice> Engines { get; } =
     [
-        new(TtsEngine.IndexTTS, "IndexTTS-2"),
-        new(TtsEngine.EchoTTS, "Echo-TTS"),
-        new(TtsEngine.IndicSpeak, "Indic-Speak (Indian languages)"),
+        new(TtsEngine.IndexTTS, "IndexTTS-2", "Clones a voice sample, with emotion control"),
+        new(TtsEngine.EchoTTS, "Echo-TTS", "Fast, expressive cloning of a voice sample"),
+        new(TtsEngine.IndicSpeak, "Indic-Speak", "22 Indian languages, built-in voices"),
     ];
+
+    /// <summary>Refreshes each engine button's highlight and its installed/loaded line.</summary>
+    private void UpdateEngineChoices()
+    {
+        foreach (var e in Engines)
+        {
+            e.IsSelected = e.Engine == SelectedEngine;
+            e.IsInstalled = e.Engine switch
+            {
+                TtsEngine.EchoTTS => _setupService.IsEchoSetupComplete,
+                TtsEngine.IndicSpeak => _setupService.IsIndicSetupComplete,
+                _ => _setupService.IsSetupComplete,
+            };
+            var loaded = e.Engine switch
+            {
+                TtsEngine.EchoTTS => _echo.IsRunning,
+                TtsEngine.IndicSpeak => _indic.IsReady,
+                _ => _mainVm.IsBackendRunning,
+            };
+            e.Status = !e.IsInstalled ? "Not installed · see Setup"
+                : loaded ? "Loaded"
+                : e.IsSelected ? "Selected · loads when needed"
+                : "Installed";
+        }
+    }
+
+    // Echo-TTS loads during a generation, so refresh the "Loaded" lines when one starts or ends
+    partial void OnIsGeneratingChanged(bool value) => UpdateEngineChoices();
+
+    /// <summary>Picks an engine from its button (the PC switches and loads it in the background).</summary>
+    [RelayCommand]
+    private void SelectEngineChoice(EngineChoice? choice)
+    {
+        if (choice == null || choice.Engine == SelectedEngine) return;
+        if (IsGenerating)
+        {
+            StatusText = "Wait for the current generation to finish before switching engines.";
+            return;
+        }
+        SelectedEngine = choice.Engine;
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIndexTts), nameof(IsEcho), nameof(IsIndic), nameof(UsesVoiceSample),
@@ -180,6 +222,18 @@ public partial class GenerateViewModel : ObservableObject
             OnPropertyChanged(nameof(EngineReadyText)));
         _audioPlayer.OnPlaybackStopped += () =>
             App.Current.Dispatcher.Invoke(() => IsPlaying = false);
+        // Keep the engine buttons' installed/loaded lines current
+        _mainVm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(MainWindowViewModel.IsBackendRunning) or nameof(MainWindowViewModel.IsUnloaded)
+                or nameof(MainWindowViewModel.BackendStatus))
+                UpdateEngineChoices();
+        };
+        _setupService.OnSetupCompleted += () => App.Current.Dispatcher.BeginInvoke(UpdateEngineChoices);
+        _setupService.OnEchoSetupCompleted += () => App.Current.Dispatcher.BeginInvoke(UpdateEngineChoices);
+        _setupService.OnIndicSetupCompleted += () => App.Current.Dispatcher.BeginInvoke(UpdateEngineChoices);
+        _indic.StateChanged += () => App.Current.Dispatcher.BeginInvoke(UpdateEngineChoices);
+        UpdateEngineChoices();
         _voiceLibrary.VoicesChanged += RefreshVoices;
         RefreshVoices();
     }
@@ -193,6 +247,7 @@ public partial class GenerateViewModel : ObservableObject
 
     partial void OnSelectedEngineChanged(TtsEngine value)
     {
+        UpdateEngineChoices();
         HasError = false;
         StatusText = value switch
         {

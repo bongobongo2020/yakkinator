@@ -2,6 +2,7 @@
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      ScrollViewer.CanContentScroll="True"
       Title="Generate">
 
     <Grid Margin="8,4,8,4">
@@ -11,19 +12,77 @@
         </Grid.ColumnDefinitions>
 
         <!-- Main Content -->
-        <ScrollViewer Grid.Column="0" Margin="0,0,10,0" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer CanContentScroll="False" Grid.Column="0" Margin="0,0,10,0" VerticalScrollBarVisibility="Auto">
             <StackPanel MaxWidth="560">
 
                 <!-- Engine Selection -->
                 <TextBlock Text="ENGINE" Style="{StaticResource RetroSectionLabel}" />
-                <ComboBox ItemsSource="{Binding Engines}"
-                          DisplayMemberPath="Name"
-                          SelectedValuePath="Engine"
-                          SelectedValue="{Binding SelectedEngine}"
-                          IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBoolConverter}}"
-                          HorizontalAlignment="Left"
-                          MinWidth="200"
-                          Margin="0,0,0,5" />
+                <!-- One big button per engine: the picked one glows cyan, each shows whether it's installed/loaded -->
+                <ItemsControl ItemsSource="{Binding Engines}" Margin="0,0,0,6"
+                              IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBoolConverter}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Command="{Binding DataContext.SelectEngineChoiceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}"
+                                    Cursor="Hand" Margin="0,0,6,0"
+                                    ToolTip="{Binding Tagline}"
+                                    AutomationProperties.Name="{Binding Name}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Card" CornerRadius="6" Padding="10,8,10,8"
+                                                Background="{StaticResource RetroCard}"
+                                                BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock x:Name="Title" Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource RetroText}" />
+                                                    <TextBlock Text="{Binding Tagline}" FontSize="10" Opacity="0.7" TextWrapping="Wrap"
+                                                               Foreground="{StaticResource RetroText}" Margin="0,2,0,4" />
+                                                    <TextBlock x:Name="StatusLine" Text="{Binding Status}" FontSize="10"
+                                                               Foreground="{StaticResource RetroMuted}" />
+                                                </StackPanel>
+                                                <ui:SymbolIcon x:Name="Check" Grid.Column="1" Symbol="CheckmarkCircle24" Filled="True"
+                                                               FontSize="20" Foreground="{StaticResource RetroCyan}"
+                                                               VerticalAlignment="Top" Visibility="Collapsed" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource RetroCyan}" />
+                                                <Setter TargetName="Card" Property="Background" Value="#2A1A5C" />
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="Card" Property="Background" Value="#3A2580" />
+                                            </Trigger>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource RetroCyan}" />
+                                                <Setter TargetName="Card" Property="BorderThickness" Value="2.5" />
+                                                <Setter TargetName="Card" Property="Background" Value="#2A1A5C" />
+                                                <Setter TargetName="Title" Property="Foreground" Value="{StaticResource RetroCyan}" />
+                                                <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsInstalled}" Value="False">
+                                                <Setter TargetName="StatusLine" Property="Foreground" Value="#FF8A80" />
+                                            </DataTrigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter TargetName="Card" Property="Opacity" Value="0.5" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
                 <!-- Voice Selection -->
                 <TextBlock Text="VOICE" Style="{StaticResource RetroSectionLabel}" />
@@ -297,7 +356,7 @@
         </ScrollViewer>
 
         <!-- Right Sidebar: Advanced Settings + Saved Voices -->
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer CanContentScroll="False" Grid.Column="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <TextBlock Text="ADVANCED" Style="{StaticResource RetroSectionLabel}" />
                 <ui:CardExpander Header="Generation Parameters" Margin="0,0,0,5"

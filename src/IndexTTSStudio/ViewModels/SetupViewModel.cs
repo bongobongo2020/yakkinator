@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using IndexTTSStudio.Models;
 using IndexTTSStudio.Services;
 
 namespace IndexTTSStudio.ViewModels;
@@ -22,6 +23,8 @@ public partial class SetupViewModel : ObservableObject
     [ObservableProperty] private bool _isEchoInstalled;
     [ObservableProperty] private bool _isIndicInstalled;
     [ObservableProperty] private bool _isVoiceDesignInstalled;
+    [ObservableProperty] private bool _isMossDesignInstalled;
+    [ObservableProperty] private bool _isVoxCpmDesignInstalled;
     /// <summary>Hugging Face read token, used once for the gated download and never saved.</summary>
     [ObservableProperty] private string _hfToken = "";
 
@@ -53,12 +56,25 @@ public partial class SetupViewModel : ObservableObject
         IsEchoInstalled = _setupService.IsEchoSetupComplete;
         IsIndicInstalled = _setupService.IsIndicSetupComplete;
         IsVoiceDesignInstalled = _setupService.IsVoiceDesignSetupComplete;
+        IsMossDesignInstalled = _setupService.IsDesignerSetupComplete(VoiceDesigner.Moss);
+        IsVoxCpmDesignInstalled = _setupService.IsDesignerSetupComplete(VoiceDesigner.VoxCpm);
     }
 
     [RelayCommand]
-    private async Task InstallVoiceDesignAsync()
+    private Task InstallVoiceDesignAsync() => InstallDesignerAsync(VoiceDesigner.Qwen, IsVoiceDesignInstalled,
+        () => IsVoiceDesignInstalled = true);
+
+    [RelayCommand]
+    private Task InstallMossDesignAsync() => InstallDesignerAsync(VoiceDesigner.Moss, IsMossDesignInstalled,
+        () => IsMossDesignInstalled = true);
+
+    [RelayCommand]
+    private Task InstallVoxCpmDesignAsync() => InstallDesignerAsync(VoiceDesigner.VoxCpm, IsVoxCpmDesignInstalled,
+        () => IsVoxCpmDesignInstalled = true);
+
+    private async Task InstallDesignerAsync(VoiceDesigner id, bool reinstall, Action markInstalled)
     {
-        var force = IsVoiceDesignInstalled;
+        var name = VoiceDesigners.Get(id).Name;
         IsRunning = true;
         HasError = false;
         ErrorText = "";
@@ -68,15 +84,15 @@ public partial class SetupViewModel : ObservableObject
         {
             // A running server keeps the model files open
             await _designer.StopAsync();
-            await _setupService.InstallVoiceDesignAsync(force);
-            IsVoiceDesignInstalled = true;
-            StatusText = "Voice designer installed! Open the Voice Library page to design a voice.";
+            await _setupService.InstallDesignerAsync(id, reinstall);
+            markInstalled();
+            StatusText = $"{name} installed! Open the Voice Library page to design a voice.";
         }
         catch (Exception ex)
         {
             HasError = true;
             ErrorText = ex.Message;
-            StatusText = "Voice designer install failed. See error below.";
+            StatusText = $"{name} install failed. See error below.";
         }
         finally
         {
