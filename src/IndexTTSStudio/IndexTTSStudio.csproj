@@ -29,5 +29,8 @@
     <None Include="..\..\python\indic_server.py" Link="python\indic_server.py">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\python\voicedesign_server.py" Link="python\voicedesign_server.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

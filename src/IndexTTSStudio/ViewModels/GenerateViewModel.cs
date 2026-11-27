@@ -13,6 +13,7 @@ public partial class GenerateViewModel : ObservableObject
     private readonly TTSApiClient _apiClient;
     private readonly EchoBackendService _echo;
     private readonly IndicBackendService _indic;
+    private readonly VoiceDesignService _designer;
     private readonly AudioPlayerService _audioPlayer;
     private readonly VoiceLibraryService _voiceLibrary;
     private readonly MainWindowViewModel _mainVm;
@@ -124,12 +125,13 @@ public partial class GenerateViewModel : ObservableObject
     [ObservableProperty] private List<VoiceProfile> _savedVoices = [];
 
     public GenerateViewModel(TTSApiClient apiClient, EchoBackendService echo, IndicBackendService indic,
-        AudioPlayerService audioPlayer, VoiceLibraryService voiceLibrary, MainWindowViewModel mainVm,
-        SettingsService settingsService, SetupService setupService)
+        VoiceDesignService designer, AudioPlayerService audioPlayer, VoiceLibraryService voiceLibrary,
+        MainWindowViewModel mainVm, SettingsService settingsService, SetupService setupService)
     {
         _apiClient = apiClient;
         _echo = echo;
         _indic = indic;
+        _designer = designer;
         _audioPlayer = audioPlayer;
         _voiceLibrary = voiceLibrary;
         _mainVm = mainVm;
@@ -305,6 +307,8 @@ public partial class GenerateViewModel : ObservableObject
         try
         {
             if (IsIndic) RememberIndicVoice();
+            // The voice designer only loads while designing; give its GPU memory back to the engine
+            if (_designer.IsRunning) await _designer.StopAsync();
             if (IsIndexTts && !_mainVm.IsBackendRunning && _mainVm.IsUnloaded && _mainVm.ReloadIndexTtsAsync is { } reload)
             {
                 StatusText = "Loading IndexTTS-2 again...";

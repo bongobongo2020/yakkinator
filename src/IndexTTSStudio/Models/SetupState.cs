@@ -12,6 +12,8 @@ public class SetupState
     public bool EchoModelsDownloaded { get; set; }
     public bool IndicEnvInstalled { get; set; }
     public bool IndicModelDownloaded { get; set; }
+    public bool VoiceDesignEnvInstalled { get; set; }
+    public bool VoiceDesignModelDownloaded { get; set; }
     public string? ModelVersion { get; set; } = "IndexTTS-2";
     public DateTime? LastSetupDate { get; set; }
     public string? ErrorMessage { get; set; }

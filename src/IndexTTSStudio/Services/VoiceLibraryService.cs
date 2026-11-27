@@ -39,6 +39,8 @@ public class VoiceLibraryService
                             profile.EmotionMode = saved.EmotionMode;
                             profile.EmotionAlpha = saved.EmotionAlpha;
                             profile.EmotionVector = saved.EmotionVector;
+                            profile.DesignDescription = saved.DesignDescription;
+                            profile.Transcript = saved.Transcript;
                         }
                     }
                     catch { }
@@ -49,7 +51,8 @@ public class VoiceLibraryService
             .ToList();
     }
 
-    public string SaveVoice(string name, string sourceFilePath, string emotionMode = "none", float emotionAlpha = 0.6f, float[]? emotionVector = null)
+    public string SaveVoice(string name, string sourceFilePath, string emotionMode = "none", float emotionAlpha = 0.6f,
+        float[]? emotionVector = null, VoiceDesignInfo? design = null)
     {
         Directory.CreateDirectory(PathHelper.VoicesDir);
         var safeName = new string(name.Where(c => char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == ' ').ToArray()).Trim();
@@ -84,6 +87,32 @@ public class VoiceLibraryService
             EmotionAlpha = emotionAlpha,
             EmotionVector = emotionVector ?? new float[8],
         };
+        // Keep how a designed voice was made: the clip is the voice, but this lets it be recreated
+        if (design != null)
+        {
+            settings.DesignDescription = design.Description;
+            settings.Transcript = design.Transcript;
+            settings.DesignLanguage = design.Language;
+            settings.DesignSeed = design.Seed;
+            settings.DesignModel = design.Model;
+        }
+        else if (File.Exists(jsonPath))
+        {
+            // Re-saving a designed voice (e.g. after generating with it) keeps its design info
+            try
+            {
+                var old = JsonSerializer.Deserialize<VoiceProfileSettings>(File.ReadAllText(jsonPath));
+                if (old?.DesignDescription != null)
+                {
+                    settings.DesignDescription = old.DesignDescription;
+                    settings.Transcript = old.Transcript;
+                    settings.DesignLanguage = old.DesignLanguage;
+                    settings.DesignSeed = old.DesignSeed;
+                    settings.DesignModel = old.DesignModel;
+                }
+            }
+            catch (Exception ex) when (ex is JsonException or IOException) { }
+        }
         File.WriteAllText(jsonPath, JsonSerializer.Serialize(settings));
         VoicesChanged?.Invoke();
         return destPath;
@@ -102,5 +131,10 @@ public class VoiceLibraryService
         public string EmotionMode { get; set; } = "none";
         public float EmotionAlpha { get; set; } = 0.6f;
         public float[] EmotionVector { get; set; } = new float[8];
+        public string? DesignDescription { get; set; }
+        public string? Transcript { get; set; }
+        public string? DesignLanguage { get; set; }
+        public long? DesignSeed { get; set; }
+        public string? DesignModel { get; set; }
     }
 }

@@ -34,6 +34,7 @@ public class RemoteServerService : IDisposable
     private readonly TTSApiClient _apiClient;
     private readonly EchoBackendService _echo;
     private readonly IndicBackendService _indic;
+    private readonly VoiceDesignService _designer;
     private readonly VoiceLibraryService _voiceLibrary;
     private readonly MainWindowViewModel _mainVm;
     private readonly GenerateViewModel _generateVm;
@@ -47,9 +48,10 @@ public class RemoteServerService : IDisposable
     public event Action? StatusChanged;
 
     public RemoteServerService(SettingsService settingsService, SetupService setupService, TTSApiClient apiClient,
-        EchoBackendService echo, IndicBackendService indic, VoiceLibraryService voiceLibrary,
+        EchoBackendService echo, IndicBackendService indic, VoiceDesignService designer, VoiceLibraryService voiceLibrary,
         MainWindowViewModel mainVm, GenerateViewModel generateVm)
     {
+        _designer = designer;
         _settingsService = settingsService;
         _setupService = setupService;
         _apiClient = apiClient;
@@ -404,6 +406,9 @@ public class RemoteServerService : IDisposable
             return Error(StatusCodes.Status503ServiceUnavailable, "IndexTTS-2 isn't set up on the PC.");
         if (engine == TtsEngine.IndicSpeak && !_setupService.IsIndicSetupComplete)
             return Error(StatusCodes.Status503ServiceUnavailable, "Indic-Speak isn't installed on the PC.");
+
+        // The voice designer only loads while someone designs on the PC; the engine needs its GPU memory
+        if (_designer.IsRunning) await _designer.StopAsync();
 
         if (_mainVm.SelectedEngine != engine)
         {

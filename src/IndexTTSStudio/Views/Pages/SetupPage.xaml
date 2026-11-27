@@ -139,6 +139,37 @@
                 </StackPanel>
             </ui:Card>
 
+            <TextBlock Text="VOICE DESIGNER (OPTIONAL)" Style="{StaticResource RetroSectionLabel}" Margin="0,4,0,2" />
+            <ui:Card Margin="0,0,0,4" Padding="8,6,8,6"
+                     Background="{StaticResource RetroCard}"
+                     BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,0,0,5">
+                        <Run>Create original voices from a description ("a raspy middle-aged man with a warm, unhurried voice") with </Run>
+                        <Hyperlink NavigateUri="https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign">Qwen3-TTS VoiceDesign</Hyperlink>
+                        <Run>, then save them to the Voice Library for Echo-TTS and IndexTTS-2 to clone. Downloads PyTorch (~2.5 GB) and the model (~4.5 GB). Needs an NVIDIA GPU with ~6 GB free VRAM; the other engines are unloaded while you design. Licensed under Apache-2.0.</Run>
+                    </TextBlock>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Install Voice Designer"
+                                   Icon="{ui:SymbolIcon ArrowDownload24}"
+                                   Command="{Binding InstallVoiceDesignCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"
+                                   Visibility="{Binding IsVoiceDesignInstalled, Converter={StaticResource InverseBoolToVisConverter}}" />
+                        <ui:Badge Visibility="{Binding IsVoiceDesignInstalled, Converter={StaticResource BoolToVisConverter}}"
+                                  Appearance="Success" VerticalAlignment="Center" Margin="0,0,8,0">
+                            <TextBlock Text="Voice Designer Installed" />
+                        </ui:Badge>
+                        <ui:Button Content="Reinstall Voice Designer"
+                                   Icon="{ui:SymbolIcon ArrowDownload24}"
+                                   Command="{Binding InstallVoiceDesignCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"
+                                   Visibility="{Binding IsVoiceDesignInstalled, Converter={StaticResource BoolToVisConverter}}" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
             <ui:InfoBar Title="Setup Error"
                         Message="{Binding ErrorText}"
                         IsOpen="{Binding HasError}"

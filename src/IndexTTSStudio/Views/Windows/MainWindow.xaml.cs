@@ -17,6 +17,7 @@ public partial class MainWindow : FluentWindow
     private readonly SetupService _setupService;
     private readonly EchoBackendService _echo;
     private readonly IndicBackendService _indic;
+    private readonly VoiceDesignService _designer;
     private CancellationTokenSource? _startCts;
 
     public MainWindow()
@@ -26,6 +27,7 @@ public partial class MainWindow : FluentWindow
         _setupService = App.Services.GetRequiredService<SetupService>();
         _echo = App.Services.GetRequiredService<EchoBackendService>();
         _indic = App.Services.GetRequiredService<IndicBackendService>();
+        _designer = App.Services.GetRequiredService<VoiceDesignService>();
         _viewModel.SelectedEngine = App.Services.GetRequiredService<SettingsService>().Settings.Engine;
         DataContext = _viewModel;
 
@@ -63,11 +65,12 @@ public partial class MainWindow : FluentWindow
     /// the next generation (Echo-TTS and Indic-Speak by themselves, IndexTTS-2 through ReloadIndexTtsAsync).</summary>
     private async Task<bool> UnloadEnginesAsync()
     {
-        var wasLoaded = _backend.IsRunning || _echo.IsRunning || _indic.IsRunning || _startingBackend;
+        var wasLoaded = _backend.IsRunning || _echo.IsRunning || _indic.IsRunning || _designer.IsRunning || _startingBackend;
         _startCts?.Cancel();
         await _backend.StopAsync();
         await _echo.StopAsync();
         await _indic.StopAsync();
+        await _designer.StopAsync();
         _viewModel.IsBackendRunning = false;
         _viewModel.IsUnloaded = true;
         _viewModel.BackendStatus = "Unloaded to free GPU memory — loads again on the next generation";
@@ -150,6 +153,8 @@ public partial class MainWindow : FluentWindow
                 await _echo.StopAsync();
             if (engine != TtsEngine.IndicSpeak)
                 await _indic.StopAsync();
+            // Picking an engine means speech is next; the designer reloads when the user designs again
+            await _designer.StopAsync();
 
             if (engine == TtsEngine.IndicSpeak)
             {

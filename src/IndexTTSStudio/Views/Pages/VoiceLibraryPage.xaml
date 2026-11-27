@@ -4,9 +4,131 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="Voice Library">
 
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="8,4,8,4" MaxWidth="640" HorizontalAlignment="Left">
-        <Grid Margin="0,0,0,6">
-            <TextBlock Text="Voice Library" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+        <!-- Voice designer -->
+        <TextBlock Text="DESIGN A VOICE" Style="{StaticResource RetroSectionLabel}" />
+        <ui:Card Margin="0,0,0,6" Padding="8,6,8,6"
+                 Background="{StaticResource RetroCard}"
+                 BorderBrush="{StaticResource RetroBorder}" BorderThickness="1.5">
+            <StackPanel>
+                <!-- Not installed -->
+                <TextBlock TextWrapping="Wrap" FontSize="11"
+                           Visibility="{Binding IsDesignerInstalled, Converter={StaticResource InverseBoolToVisConverter}}">
+                    <Run>Create an original voice by describing it, then save it here for Echo-TTS and IndexTTS-2 to clone. Install the voice designer (Qwen3-TTS VoiceDesign) from the Setup page first.</Run>
+                </TextBlock>
+
+                <StackPanel Visibility="{Binding IsDesignerInstalled, Converter={StaticResource BoolToVisConverter}}">
+                    <TextBlock Text="Describe the voice: age, gender, accent, timbre, pace and mood. The more specific, the closer the result."
+                               TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,0,0,4" />
+                    <ui:TextBox Text="{Binding DesignDescription, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="e.g. A raspy middle-aged man with a warm, unhurried baritone and a calm delivery"
+                                AcceptsReturn="False" TextWrapping="Wrap" MinHeight="44" MaxHeight="80"
+                                IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}"
+                                Margin="0,0,0,4" />
+                    <ComboBox ItemsSource="{Binding DescriptionExamples}"
+                              SelectedItem="{Binding SelectedExample}"
+                              IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}"
+                              ToolTip="Start from an example description"
+                              HorizontalAlignment="Stretch" Margin="0,0,0,6">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" FontSize="11" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Text="What the voice says (this clip becomes the reference sample: ~10–15 s of natural, neutral speech works best)"
+                               TextWrapping="Wrap" FontSize="11" Opacity="0.7" Margin="0,0,0,4" />
+                    <ui:TextBox Text="{Binding DesignScript, UpdateSourceTrigger=PropertyChanged}"
+                                AcceptsReturn="True" TextWrapping="Wrap" MinHeight="50" MaxHeight="90"
+                                IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}"
+                                Margin="0,0,0,6" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="Language" VerticalAlignment="Center" FontSize="11" Margin="0,0,6,0" />
+                        <ComboBox ItemsSource="{Binding DesignLanguages}" SelectedItem="{Binding DesignLanguage}"
+                                  IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}"
+                                  MinWidth="120" Margin="0,0,12,0" />
+                        <TextBlock Text="Candidates" VerticalAlignment="Center" FontSize="11" Margin="0,0,6,0" />
+                        <ComboBox ItemsSource="{Binding CandidateCounts}" SelectedItem="{Binding CandidateCount}"
+                                  IsEnabled="{Binding IsDesigning, Converter={StaticResource InverseBoolConverter}}"
+                                  MinWidth="60" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <ui:Button Content="Design Voices" Appearance="Primary"
+                                   Icon="{ui:SymbolIcon Sparkle24}"
+                                   Command="{Binding DesignVoicesCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   Visibility="{Binding IsDesigning, Converter={StaticResource InverseBoolToVisConverter}}"
+                                   Margin="0,0,6,0" />
+                        <ui:Button Content="Cancel"
+                                   Icon="{ui:SymbolIcon Dismiss24}"
+                                   Command="{Binding CancelDesignCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   Visibility="{Binding IsDesigning, Converter={StaticResource BoolToVisConverter}}"
+                                   Margin="0,0,6,0" />
+                        <ui:Button Content="Unload Designer"
+                                   Icon="{ui:SymbolIcon ArrowEject20}"
+                                   Command="{Binding UnloadDesignerCommand}"
+                                   Style="{StaticResource BounceButton}"
+                                   ToolTip="Free the GPU memory the designer uses (generating speech also does this)"
+                                   Visibility="{Binding IsDesignerLoaded, Converter={StaticResource BoolToVisConverter}}" />
+                    </StackPanel>
+                    <ProgressBar IsIndeterminate="True" Height="4" Margin="0,2,0,4"
+                                 Visibility="{Binding IsDesigning, Converter={StaticResource BoolToVisConverter}}" />
+                    <TextBlock Text="{Binding DesignStatus}" TextWrapping="Wrap" FontSize="11" Margin="0,0,0,4"
+                               Opacity="0.8" />
+
+                    <!-- Candidates -->
+                    <ListBox ItemsSource="{Binding Candidates}"
+                             SelectedItem="{Binding SelectedCandidate}"
+                             Background="Transparent" BorderThickness="0"
+                             MaxHeight="220"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ui:Button Icon="{ui:SymbolIcon Play24}"
+                                               Command="{Binding DataContext.PlayCandidateCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                               CommandParameter="{Binding}"
+                                               Style="{StaticResource BounceButton}"
+                                               ToolTip="Play / stop" Margin="0,0,6,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Description}" FontSize="10" Opacity="0.6"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                Visibility="{Binding SelectedCandidate, Converter={StaticResource NullToVisConverter}}">
+                        <ui:TextBox Text="{Binding NewVoiceName, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="Voice name" MinWidth="220" Margin="0,0,6,0" />
+                        <ui:Button Content="Save Selected to Library" Appearance="Primary"
+                                   Icon="{ui:SymbolIcon Save24}"
+                                   Command="{Binding SaveCandidateCommand}"
+                                   Style="{StaticResource BounceButton}" />
+                    </StackPanel>
+
+                    <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.5" Margin="0,6,0,0"
+                               Text="The saved clip is the voice: designing again from the same description gives a different voice. Echo-TTS output is CC BY-NC-SA 4.0 (non-commercial). Don't use descriptions meant to imitate a real person." />
+                </StackPanel>
+            </StackPanel>
+        </ui:Card>
+
+        <!-- Library -->
+        <Grid Margin="0,4,0,6">
+            <TextBlock Text="VOICE LIBRARY" Style="{StaticResource RetroSectionLabel}" VerticalAlignment="Center" />
             <ui:Button Content="Add Voice" Appearance="Primary"
                        Icon="{ui:SymbolIcon Add24}"
                        Command="{Binding AddVoiceCommand}"
@@ -28,7 +150,17 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" />
+                                    <ui:Badge Appearance="Info" Margin="6,0,0,0" Padding="4,0,4,0" VerticalAlignment="Center"
+                                              Visibility="{Binding IsDesigned, Converter={StaticResource BoolToVisConverter}}">
+                                        <TextBlock Text="Designed" FontSize="9" />
+                                    </ui:Badge>
+                                </StackPanel>
+                                <TextBlock Text="{Binding DesignDescription}" FontSize="10" Opacity="0.6"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding DesignDescription}"
+                                           Visibility="{Binding IsDesigned, Converter={StaticResource BoolToVisConverter}}" />
                                 <TextBlock Opacity="0.5" FontSize="10">
                                     <Run Text="{Binding FileSize, StringFormat={}{0:N0} bytes}" />
                                     <Run Text=" | " />
@@ -53,4 +185,5 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
     </StackPanel>
+    </ScrollViewer>
 </Page>

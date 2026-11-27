@@ -288,6 +288,107 @@ public class SetupService
         OnIndicSetupCompleted?.Invoke();
     }
 
+    public bool IsVoiceDesignSetupComplete =>
+        _state.VoiceDesignEnvInstalled && _state.VoiceDesignModelDownloaded && VoiceDesignService.IsInstalled;
+
+    /// <summary>Raised when the voice designer install finishes successfully.</summary>
+    public event Action? OnVoiceDesignSetupCompleted;
+
+    public const string VoiceDesignModelRepo = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign";
+    public const string VoiceDesignModelUrl = "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign";
+    // qwen-tts is installed without its dependencies so its Gradio demo (unused here) isn't pulled in;
+    // these are the rest of its requirements, with its transformers/accelerate pins.
+    private const string VoiceDesignPackages =
+        "\"transformers==4.57.3\" \"accelerate==1.12.0\" librosa soundfile sox onnxruntime einops numpy " +
+        "fastapi uvicorn \"huggingface_hub[hf_xet]\"";
+
+    private const string VoiceDesignDownloadScript = """
+        import sys
+        from huggingface_hub import snapshot_download
+        snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[2])
+        print("YAK_DONE", flush=True)
+        """;
+
+    /// <summary>
+    /// Creates the voice designer's own Python environment (qwen-tts pins transformers 4.57.3) and
+    /// downloads Qwen3-TTS VoiceDesign (Apache-2.0, not gated).
+    /// </summary>
+    public async Task InstallVoiceDesignAsync(bool force = false, CancellationToken ct = default)
+    {
+        PathHelper.EnsureDirectories();
+        Directory.CreateDirectory(PathHelper.VoiceDesignDir);
+
+        string uv;
+        try { uv = await ProcessHelper.EnsureUvAsync(s => Status($"Installing uv: {s}"), ct); }
+        catch (InvalidOperationException ex) { throw Fail(ex.Message); }
+
+        if (force || !_state.VoiceDesignEnvInstalled || !File.Exists(PathHelper.VoiceDesignPython))
+        {
+            Progress(0.05);
+            Status("Creating the voice designer's Python environment...");
+            var (venvExit, _, venvErr) = await ProcessHelper.RunAsync(uv, "venv .venv --python 3.12 --seed --allow-existing",
+                workingDirectory: PathHelper.VoiceDesignDir, ct: ct, onOutput: s => Status($"venv: {s}"));
+            if (venvExit != 0 || !File.Exists(PathHelper.VoiceDesignPython))
+                throw Fail($"Couldn't create the voice designer environment: {venvErr}");
+
+            Progress(0.10);
+            Status("Installing PyTorch with CUDA (~2.5 GB, this takes a while)...");
+            var py = $"--python \"{PathHelper.VoiceDesignPython}\"";
+            var (torchExit, _, torchErr) = await ProcessHelper.RunAsync(uv,
+                $"pip install {py} torch torchaudio --index-url {TorchIndexUrl}",
+                workingDirectory: PathHelper.VoiceDesignDir, ct: ct, onOutput: s => Status($"PyTorch: {s}"));
+            if (torchExit != 0)
+                throw Fail($"Failed to install PyTorch: {FilterDownloadErrors(torchErr)}");
+
+            Progress(0.35);
+            Status("Installing Qwen3-TTS and the API server...");
+            var (pkgExit, _, pkgErr) = await ProcessHelper.RunAsync(uv, $"pip install {py} {VoiceDesignPackages}",
+                workingDirectory: PathHelper.VoiceDesignDir, ct: ct, onOutput: s => Status($"Packages: {s}"));
+            if (pkgExit != 0)
+                throw Fail($"Failed to install the voice designer's dependencies: {FilterDownloadErrors(pkgErr)}");
+            var (qwenExit, _, qwenErr) = await ProcessHelper.RunAsync(uv, $"pip install {py} --no-deps \"qwen-tts==0.1.1\"",
+                workingDirectory: PathHelper.VoiceDesignDir, ct: ct, onOutput: s => Status($"Packages: {s}"));
+            if (qwenExit != 0)
+                throw Fail($"Failed to install qwen-tts: {FilterDownloadErrors(qwenErr)}");
+
+            _state.VoiceDesignEnvInstalled = true;
+            SaveState();
+        }
+        Progress(0.45);
+
+        if (force || !_state.VoiceDesignModelDownloaded || !VoiceDesignService.IsInstalled)
+        {
+            Status("Downloading Qwen3-TTS VoiceDesign from Hugging Face (~4.5 GB, this may take a while)...");
+            var scriptPath = Path.Combine(PathHelper.VoiceDesignDir, "_download.py");
+            File.WriteAllText(scriptPath, VoiceDesignDownloadScript);
+            int exitCode;
+            string error;
+            try
+            {
+                (exitCode, _, error) = await ProcessHelper.RunAsync(PathHelper.VoiceDesignPython,
+                    $"\"{scriptPath}\" {VoiceDesignModelRepo} model",
+                    workingDirectory: PathHelper.VoiceDesignDir, ct: ct,
+                    environment: new Dictionary<string, string> { ["PYTHONUTF8"] = "1" },
+                    onOutput: s => { if (!s.StartsWith("YAK_")) Status($"Download: {s}"); });
+            }
+            finally
+            {
+                if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            }
+            if (exitCode != 0 || !VoiceDesignService.IsInstalled)
+                throw Fail($"Voice designer download failed (exit {exitCode}).\n{FilterDownloadErrors(error)}");
+
+            _state.VoiceDesignModelDownloaded = true;
+            SaveState();
+        }
+
+        Progress(1.0);
+        _state.ErrorMessage = null;
+        SaveState();
+        Status("Voice designer installed! Open the Voice Library page to design a voice.");
+        OnVoiceDesignSetupCompleted?.Invoke();
+    }
+
     private async Task DownloadFileAsync(string url, string destPath, string label,
         double progressStart, double progressEnd, CancellationToken ct)
     {

@@ -9,6 +9,7 @@ public partial class SetupViewModel : ObservableObject
     private readonly SetupService _setupService;
     private readonly EchoBackendService _echo;
     private readonly IndicBackendService _indic;
+    private readonly VoiceDesignService _designer;
 
     [ObservableProperty] private string _statusText = "Ready to set up IndexTTS-2";
     [ObservableProperty] private double _progress;
@@ -20,17 +21,20 @@ public partial class SetupViewModel : ObservableObject
     [ObservableProperty] private bool _canRedownloadModels;
     [ObservableProperty] private bool _isEchoInstalled;
     [ObservableProperty] private bool _isIndicInstalled;
+    [ObservableProperty] private bool _isVoiceDesignInstalled;
     /// <summary>Hugging Face read token, used once for the gated download and never saved.</summary>
     [ObservableProperty] private string _hfToken = "";
 
     public string IndicModelUrl => SetupService.IndicModelUrl;
     public string HfTokenUrl => SetupService.HfTokenUrl;
 
-    public SetupViewModel(SetupService setupService, EchoBackendService echo, IndicBackendService indic)
+    public SetupViewModel(SetupService setupService, EchoBackendService echo, IndicBackendService indic,
+        VoiceDesignService designer)
     {
         _setupService = setupService;
         _echo = echo;
         _indic = indic;
+        _designer = designer;
         _setupService.OnStatusChanged += msg =>
         {
             App.Current.Dispatcher.Invoke(() =>
@@ -48,6 +52,36 @@ public partial class SetupViewModel : ObservableObject
         CanRedownloadModels = _setupService.State.ModelsDownloaded;
         IsEchoInstalled = _setupService.IsEchoSetupComplete;
         IsIndicInstalled = _setupService.IsIndicSetupComplete;
+        IsVoiceDesignInstalled = _setupService.IsVoiceDesignSetupComplete;
+    }
+
+    [RelayCommand]
+    private async Task InstallVoiceDesignAsync()
+    {
+        var force = IsVoiceDesignInstalled;
+        IsRunning = true;
+        HasError = false;
+        ErrorText = "";
+        LogText = "";
+
+        try
+        {
+            // A running server keeps the model files open
+            await _designer.StopAsync();
+            await _setupService.InstallVoiceDesignAsync(force);
+            IsVoiceDesignInstalled = true;
+            StatusText = "Voice designer installed! Open the Voice Library page to design a voice.";
+        }
+        catch (Exception ex)
+        {
+            HasError = true;
+            ErrorText = ex.Message;
+            StatusText = "Voice designer install failed. See error below.";
+        }
+        finally
+        {
+            IsRunning = false;
+        }
     }
 
     [RelayCommand]

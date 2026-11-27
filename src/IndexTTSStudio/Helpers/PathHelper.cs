@@ -33,11 +33,22 @@ public static class PathHelper
     public static string IndicPython => Path.Combine(IndicVenvDir, "Scripts", "python.exe");
     public static string IndicModelDir => Path.Combine(IndicDir, "model");
 
+    // Voice designer (Qwen3-TTS VoiceDesign): its own venv (qwen-tts pins transformers 4.57.3)
+    public static string VoiceDesignDir => Path.Combine(AppDataDir, "voice-design");
+    public static string VoiceDesignVenvDir => Path.Combine(VoiceDesignDir, ".venv");
+    public static string VoiceDesignPython => Path.Combine(VoiceDesignVenvDir, "Scripts", "python.exe");
+    public static string VoiceDesignModelDir => Path.Combine(VoiceDesignDir, "model");
+    /// <summary>Candidate clips from the designer, before one is saved to the library.</summary>
+    public static string VoiceDesignCandidatesDir => Path.Combine(VoiceDesignDir, "candidates");
+
     /// <summary>Path to the api_server.py bundled with the .NET app.</summary>
     public static string ApiServerScript => FindBundledScript("api_server.py");
 
     /// <summary>Path to the indic_server.py bundled with the .NET app.</summary>
     public static string IndicServerScript => FindBundledScript("indic_server.py");
+
+    /// <summary>Path to the voicedesign_server.py bundled with the .NET app.</summary>
+    public static string VoiceDesignServerScript => FindBundledScript("voicedesign_server.py");
 
     /// <summary>Finds a script next to the exe (published), or at dev time in the repo's python/ folder.</summary>
     private static string FindBundledScript(string fileName)

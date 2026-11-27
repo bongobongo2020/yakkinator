@@ -7,11 +7,17 @@ public class AppSettings
     public int ApiPort { get; set; } = 5299;
     public int EchoApiPort { get; set; } = 5300;
     public int IndicApiPort { get; set; } = 5302;
+    public int VoiceDesignApiPort { get; set; } = 5303;
 
     // Indic-Speak: last-used voice and style (it has a fixed voice library, no cloning)
     public string IndicLanguage { get; set; } = "hi";
     public string IndicSpeaker { get; set; } = "Kavya";
     public string IndicStyle { get; set; } = "";
+
+    // Voice designer: last description and sample script
+    public string VoiceDesignDescription { get; set; } = "";
+    public string VoiceDesignScript { get; set; } = "";
+    public string VoiceDesignLanguage { get; set; } = "English";
     public string ModelVersion { get; set; } = "IndexTTS-2";
     public bool AutoStartBackend { get; set; } = true;
     public string OutputDirectory { get; set; } = "";

@@ -66,6 +66,7 @@ public partial class App : Application
             new TTSApiClient(sp.GetRequiredService<SettingsService>().Settings.ApiPort, sp.GetRequiredService<SettingsService>()));
         services.AddSingleton<EchoBackendService>();
         services.AddSingleton<IndicBackendService>();
+        services.AddSingleton<VoiceDesignService>();
         services.AddSingleton<AudioPlayerService>();
         services.AddSingleton<VoiceLibraryService>();
         services.AddSingleton<RemoteServerService>();
