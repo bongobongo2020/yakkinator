@@ -33,4 +33,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  <!-- A running copy locks Yakkinator.exe and the build can't overwrite it: close the one running
+       from this output folder first (copies installed elsewhere are left alone). -->
+  <Target Name="StopRunningApp" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\build\StopRunningApp.ps1&quot; -Dir &quot;$(TargetDir.TrimEnd('\'))&quot; -Name &quot;$(AssemblyName)&quot;"
+          ContinueOnError="true" />
+  </Target>
 </Project>
